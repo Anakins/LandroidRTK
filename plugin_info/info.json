@@ -1,0 +1,18 @@
+{
+    "id": "LandroidRTK",
+    "name": "Landroid RTK",
+    "description": "Pilotage des tondeuses robot Worx Landroid Vision Cloud (2WD/4WD, RTK) via l'API cloud officielle. Ne gère volontairement PAS les anciens modèles (déjà couverts par le plugin worxLandroid).",
+    "licence": "AGPL",
+    "author": "Anakin en dev",
+    "require": "4.2",
+    "category": "devicecommunication",
+    "changelog": "docs/changelog.md",
+    "documentation": "docs/fr_FR/index.md",
+    "language": "",
+    "compatibility": "",
+    "hasOwnDeamon": true,
+    "hasDependency": true,
+    "maxDependancyInstallTime": 20,
+    "screenshot": [],
+    "state": "experimental"
+}
