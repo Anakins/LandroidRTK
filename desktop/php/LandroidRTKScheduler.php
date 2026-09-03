@@ -22,7 +22,7 @@ if (!isConnect()) {
             <thead>
                 <tr>
                     <th>Condition</th>
-                    <th style="width:220px;">État</th>
+                    <th style="width:550px;">État</th>
                 </tr>
             </thead>
             <tbody id="schedule_conditions_status_body"></tbody>
@@ -37,7 +37,7 @@ if (!isConnect()) {
         </div>
         <div>
             <a class="btn btn-default btn-sm" id="bt_markMowToday"><i class="fas fa-check"></i> Marquer la tonte d'aujourd'hui comme faite</a>
-            <span class="help-block" style="display:inline-block; margin:4px 0 0 0;">À utiliser si tu as lancé une tonte manuellement (hors programmation) : évite que le robot ne reparte une seconde fois le même jour à cause d'une dernière tonte trop ancienne en mémoire.</span>
+            <span class="help-block" style="display:inline-block; margin:4px 0 0 0;">À utiliser si vous avez lancé une tonte manuellement (hors programmation) : évite que le robot ne reparte une seconde fois le même jour à cause d'une dernière tonte trop ancienne en mémoire.</span>
         </div>
     </div>
 
@@ -89,10 +89,12 @@ if (!isConnect()) {
                     <input type="number" id="sched_margin_minutes" class="form-control" min="0" max="600" style="width:80px;">
                     <span>min (0 à 600)</span>
                 </div>
-                <div class="col-sm-3"></div>
+                <div class="col-sm-3" style="padding-top:7px;">
+                    <span id="sched_latest_start_preview" class="text-muted"></span>
+                </div>
                 <div class="col-sm-9">
                     <span class="help-block">Le robot ne démarrera plus une tonte si elle risque de se terminer après (heure de fin − cette marge). Ex : fin=20h, marge=180min → dernier départ possible 17h.
-                    <br>💡 Astuce : en combinant l'heure de fin avec le <strong>coucher du soleil</strong> (fourni par un plugin météo externe) et une marge proche du <strong>temps de tonte habituel</strong> de ta pelouse, tu évites que le robot termine (ou soit encore dehors) une fois la nuit tombée.
+                    <br>💡 Astuce : en combinant l'heure de fin avec le <strong>coucher du soleil</strong> (fourni par un plugin météo externe) et une marge proche du <strong>temps de tonte habituel</strong> de votre pelouse, vous évitez que le robot termine (ou soit encore dehors) une fois la nuit tombée.
                     <br>🌧️ Cette même durée sert aussi à détecter une pluie survenant <strong>pendant</strong> une tonte en cours : si c'est le cas, la tonte du jour est considérée comme non effectuée, et le robot ne pourra pas redémarrer avant le délai réglé ci-dessous (section Pluie) — même si l'humidité redescend entre temps — le temps que le sol absorbe la pluie.</span>
                 </div>
             </div>
@@ -116,7 +118,7 @@ if (!isConnect()) {
                 <label class="col-sm-3 control-label">Retour à la base en cas de pluie (capteur du robot)</label>
                 <div class="col-sm-6">
                     <input type="checkbox" id="sched_rain_own_enabled">
-                    <span class="help-block">Utilise le capteur pluie natif de la tondeuse (lecture seule ici). Pour que ça fonctionne de façon fiable, pense à régler le <strong>délai pluie à 0</strong> directement dans l'application Worx.</span>
+                    <span class="help-block">Utilise le capteur pluie natif de la tondeuse (lecture seule ici). Pour que ça fonctionne de façon fiable, pensez à régler le <strong>délai pluie à 0</strong> directement dans l'application Worx.</span>
                 </div>
             </div>
 
@@ -153,7 +155,7 @@ if (!isConnect()) {
                 </div>
                 <div class="col-sm-3"></div>
                 <div class="col-sm-9">
-                    <span class="help-block">Si la pluie interrompt une tonte en cours (voir ci-dessus), le robot attend ce délai avant de retenter — même si l'humidité redescend sous le seuil entre temps — le temps que le sol absorbe l'eau. Le minimum de 40 min laisse le temps à un plugin météo externe de rafraîchir sa mesure d'humidité (certains ne se mettent à jour que toutes les 30 min). L'humidité est quand même re-testée normalement à chaque cycle une fois ce délai écoulé. Valeur par défaut : 60 min (1h).</span>
+                    <span class="help-block">Après une interruption pluie, le robot attend ce délai avant de retenter (le temps que le sol absorbe l'eau), même si l'humidité redescend entre-temps. Minimum 40 min : certains plugins météo ne rafraîchissent l'humidité que toutes les 30 min. Humidité re-testée normalement une fois le délai écoulé. Par défaut : 60 min (1h).</span>
                 </div>
             </div>
         </fieldset>
@@ -192,7 +194,7 @@ if (!isConnect()) {
 
         <fieldset>
             <legend><i class="fas fa-thermometer-half"></i> Température (optionnel)</legend>
-            <div class="help-block" style="margin:0 15px 10px;">Optionnel. Doit provenir d'un capteur externe (station météo) ou d'un plugin météo tiers — la valeur n'est jamais saisie à la main puisqu'elle changerait sans arrêt. Si tu sélectionnes une commande, le robot ne tondra pas si la température est en dehors de la plage seuil min/max. Si le champ reste vide, la température n'est pas prise en compte du tout.</div>
+            <div class="help-block" style="margin:0 15px 10px;">Optionnel. Doit provenir d'un capteur externe (station météo) ou d'un plugin météo tiers — la valeur n'est jamais saisie à la main puisqu'elle changerait sans arrêt. Si vous sélectionnez une commande, le robot ne tondra pas si la température est en dehors de la plage seuil min/max. Si le champ reste vide, la température n'est pas prise en compte du tout.</div>
             <div class="form-group">
                 <label class="col-sm-3 control-label">Commande de température</label>
                 <div class="col-sm-6">
@@ -232,7 +234,7 @@ if (!isConnect()) {
 
         <fieldset>
             <legend><i class="fas fa-battery-half"></i> Batterie</legend>
-            <div class="help-block" style="margin:0 15px 10px;">La commande de batterie du robot ("Batterie", créée automatiquement par le plugin) est utilisée directement — rien à sélectionner ici. Évite un cas piégeux : si la batterie du robot est trop faible, l'app Worx refuse en interne de démarrer la tonte, mais le plugin ne le sait pas et considérerait à tort que la tonte a eu lieu. Ce seuil bloque donc le déclenchement (avec revérification de toutes les conditions une fois la batterie remontée) plutôt que d'envoyer un ordre de démarrage qui échouerait silencieusement côté robot.</div>
+            <div class="help-block" style="margin:0 15px 10px;">La commande de batterie du robot ("Batterie", créée automatiquement par le plugin) est utilisée directement — rien à sélectionner ici. Seuil minimum requis pour démarrer le robot, ou le redémarrer après une pluie.</div>
             <div class="form-group">
                 <label class="col-sm-3 control-label">Seuil minimum</label>
                 <div class="col-sm-6" style="display:flex; align-items:center; gap:8px;">
@@ -251,7 +253,7 @@ if (!isConnect()) {
                 <strong>Rappel : le robot ne tond automatiquement que par beau temps</strong>, c'est-à-dire les codes
                 <a href="https://openweathermap.org/api/weather-conditions" target="_blank">800 à 804 (OpenWeatherMap)</a> ou
                 <a href="https://www.weatherapi.com/docs/weather_conditions.json" target="_blank">1000 à 1009 (WeatherAPI)</a>
-                — clique sur ces liens pour voir la liste complète des codes de chaque service.
+                — cliquez sur ces liens pour voir la liste complète des codes de chaque service.
             </div>
             <div class="form-group">
                 <label class="col-sm-3 control-label">Commande "condition_id"</label>

@@ -476,7 +476,7 @@ class LandroidRTKScheduler {
         if (!empty($config['temperature_cmd_id'])) {
             $cmd = self::resolveCmd($config['temperature_cmd_id']);
             if (!is_object($cmd)) {
-                $errors[] = "La commande de température est introuvable (tag invalide, ou équipement supprimé ?). Valeur saisie : \"" . $config['temperature_cmd_id'] . "\". Laisse ce champ vide si tu ne veux pas tenir compte de la température.";
+                $errors[] = "La commande de température est introuvable (tag invalide, ou équipement supprimé ?). Valeur saisie : \"" . $config['temperature_cmd_id'] . "\". Laissez ce champ vide si vous ne voulez pas tenir compte de la température.";
                 self::notifyMissingEquipment($eqLogic, "capteur de température");
             } else {
                 $val = $cmd->execCmd();
@@ -509,7 +509,7 @@ class LandroidRTKScheduler {
                         $warnings[] = $check['warning'];
                     }
                     if (!$check['known']) {
-                        $warnings[] = "Le code météo actuel ($val) ne correspond à aucun code connu d'OpenWeatherMap ou WeatherAPI — vérifie ta source météo (n'empêche pas l'activation).";
+                        $warnings[] = "Le code météo actuel ($val) ne correspond à aucun code connu d'OpenWeatherMap ou WeatherAPI — vérifiez votre source météo (n'empêche pas l'activation).";
                     }
                 }
             }
@@ -531,7 +531,7 @@ class LandroidRTKScheduler {
                         $warnings[] = $check['warning'];
                     }
                     if (!$check['known']) {
-                        $warnings[] = "La description météo actuelle (\"$val\") semble trop courte ou invalide (moins de 3 lettres) — vérifie ta source météo (n'empêche pas l'activation).";
+                        $warnings[] = "La description météo actuelle (\"$val\") semble trop courte ou invalide (moins de 3 lettres) — vérifiez votre source météo (n'empêche pas l'activation).";
                     }
                 }
             }
@@ -545,7 +545,7 @@ class LandroidRTKScheduler {
         // cohérent.
         $battery_cmd = $eqLogic->getCmd(null, 'battery');
         if (!is_object($battery_cmd)) {
-            $errors[] = "La commande de batterie (\"battery\") est introuvable sur cet équipement — attends la prochaine synchronisation avec l'API Worx, ou vérifie que l'équipement est bien à jour.";
+            $errors[] = "La commande de batterie (\"battery\") est introuvable sur cet équipement — attendez la prochaine synchronisation avec l'API Worx, ou vérifiez que l'équipement est bien à jour.";
             self::notifyMissingEquipment($eqLogic, "batterie du robot");
         } else {
             $val = $battery_cmd->execCmd();
@@ -800,7 +800,7 @@ class LandroidRTKScheduler {
         if ($start_min !== null && $end_min !== null) {
             $latest_start = $end_min - intval($config['margin_minutes']);
             $time_ok = ($now_minutes >= $start_min && $now_minutes <= $latest_start);
-            $time_detail = sprintf('%02d:%02d', intdiv($start_min, 60), $start_min % 60) . ' – ' . sprintf('%02d:%02d', intdiv($latest_start, 60), $latest_start % 60) . ' (marge incluse)';
+            $time_detail = 'Actuellement ' . sprintf('%02d:%02d', intdiv($now_minutes, 60), $now_minutes % 60);
         }
         $rows[] = array('label' => 'Dans la plage horaire autorisée', 'ok' => $time_ok, 'detail' => $time_detail);
 
@@ -1181,6 +1181,27 @@ class LandroidRTKScheduler {
             return '?';
         }
         return sprintf('%02d:%02d', intval($minutes / 60), $minutes % 60);
+    }
+
+    /**
+     * Calcule l'heure limite de démarrage (heure de fin − marge) à partir
+     * de champs "heure de début"/"heure de fin"/"marge" bruts (avant
+     * sauvegarde) — utilisé pour l'aperçu en direct à côté du champ
+     * "Marge avant l'heure de fin" dans le formulaire.
+     */
+    public static function previewLatestStart($time_start_raw, $time_end_raw, $margin_minutes) {
+        $start_resolved = self::resolveTimeField($time_start_raw);
+        $end_resolved = self::resolveTimeField($time_end_raw);
+        $start_min = ($start_resolved['mode'] == 'fixed') ? $start_resolved['minutes'] : self::parseHM(is_object($start_resolved['cmd']) ? $start_resolved['cmd']->execCmd() : null);
+        $end_min = ($end_resolved['mode'] == 'fixed') ? $end_resolved['minutes'] : self::parseHM(is_object($end_resolved['cmd']) ? $end_resolved['cmd']->execCmd() : null);
+        if ($start_min === null || $end_min === null) {
+            return array('valid' => false, 'value' => null, 'error' => 'Heure de début/fin non résolue');
+        }
+        $latest_start = $end_min - intval($margin_minutes);
+        if ($latest_start < $start_min) {
+            return array('valid' => false, 'value' => self::formatMinutes($latest_start), 'error' => 'Marge trop grande : plus aucun créneau de démarrage possible');
+        }
+        return array('valid' => true, 'value' => self::formatMinutes($latest_start), 'error' => null);
     }
 
     private static function notifyNotReady($eqLogic, $config, $state, $today, $reason) {

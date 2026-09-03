@@ -285,10 +285,50 @@ $(document).on('change blur', '#sched_rain_extra_operator, #sched_rain_extra_val
     LandroidRTKScheduler_refreshPreview($('#sched_rain_extra_cmd_id'));
 });
 
+function LandroidRTKScheduler_refreshLatestStartPreview() {
+    var $preview = $('#sched_latest_start_preview');
+    var timeStart = $('#sched_time_start_cmd_id').val();
+    var timeEnd = $('#sched_time_end_cmd_id').val();
+    var margin = $('#sched_margin_minutes').val();
+    if (!timeStart || !timeEnd) {
+        $preview.html('');
+        return;
+    }
+    $.ajax({
+        type: 'POST',
+        url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
+        data: {
+            action: 'latestStartPreview',
+            apikey: LandroidRTKApikey,
+            time_start: timeStart,
+            time_end: timeEnd,
+            margin_minutes: margin,
+        },
+        dataType: 'json',
+        success: function (data) {
+            if (data.state != 'ok') {
+                $preview.html('');
+                return;
+            }
+            var r = data.result;
+            if (r.valid) {
+                $preview.html('<span style="color:#3c763d;"><i class="fas fa-check-circle"></i> Dernier départ : ' + r.value + '</span>');
+            } else {
+                $preview.html('<span style="color:#a94442;"><i class="fas fa-times-circle"></i> ' + (r.error || 'Erreur') + '</span>');
+            }
+        }
+    });
+}
+
+$(document).on('change keyup', '#sched_time_start_cmd_id, #sched_time_end_cmd_id, #sched_margin_minutes', function () {
+    LandroidRTKScheduler_refreshLatestStartPreview();
+});
+
 function LandroidRTKScheduler_refreshAllPreviews() {
     $('#scheduletab input[type=text].form-control, #scheduletab .notif_cmd_id').each(function () {
         LandroidRTKScheduler_refreshPreview($(this));
     });
+    LandroidRTKScheduler_refreshLatestStartPreview();
 }
 
 /* ------------------------------------------------------------------ */

@@ -147,6 +147,11 @@ try {
         ajax::success(LandroidRTKScheduler::estimateNextMow($eqLogic, $config));
     }
 
+    if (init('action') == 'latestStartPreview') {
+        $result = LandroidRTKScheduler::previewLatestStart(init('time_start'), init('time_end'), init('margin_minutes'));
+        ajax::success($result);
+    }
+
     if (init('action') == 'conditionsStatus') {
         $eqLogic = eqLogic::byId(init('id'));
         if (!is_object($eqLogic)) {
