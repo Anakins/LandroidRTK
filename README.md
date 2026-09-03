@@ -89,6 +89,10 @@ Le plugin peut déclencher automatiquement une tonte quand toutes les conditions
 
 Fiche de l'équipement → onglet **"Programmation"** (à côté de "Equipement" et "Commandes"). **Cet onglet a son propre bouton "Sauvegarder"**, en haut à gauche de l'onglet — à ne pas confondre avec le bouton "Sauvegarder" natif de Jeedom, en haut à droite de la page, qui ne s'applique qu'à l'onglet "Equipement" et n'a aucun effet ici.
 
+### Tableau "État des conditions de démarrage"
+
+Dès que la programmation est **activée**, un tableau apparaît tout en haut de l'onglet, listant **chaque condition individuellement** (pas déjà tondu aujourd'hui, espacement, plage horaire, pluie, délai post-pluie, humidité, température min/max si configurée, condition météo si configurée, batterie), avec une coche verte ✅ ou une croix rouge ❌ pour chacune, accompagnée d'un détail (valeur actuelle, seuil, temps d'attente restant...). Contrairement au message d'erreur du bouton "Tester" (qui s'arrête à la première condition non remplie), ce tableau évalue **toutes** les conditions en même temps — pratique pour comprendre en un coup d'œil pourquoi le robot n'est pas encore parti, même quand presque tout est au vert. Un bouton 🔄 en haut à droite du tableau permet de rafraîchir manuellement les valeurs.
+
 ### Étapes de configuration
 
 1. **Plage horaire** : heure de début/fin (soit un tag de commande Jeedom du style `#[Objet][Équipement][Commande]#`, soit une heure fixe au format `HMM`/`HHMM`, ex: `800` = 08h00), et une marge de sécurité en minutes avant l'heure de fin

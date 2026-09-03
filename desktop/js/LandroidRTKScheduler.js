@@ -44,10 +44,44 @@ function LandroidRTKScheduler_loadConfig(_eqLogic_id) {
             // envoyé dans le Centre de Messages Jeedom par le cron.
             if (data.result.enabled == '1') {
                 LandroidRTKScheduler_checkCurrentConfigSilently();
+                LandroidRTKScheduler_loadConditionsStatus();
+                $('#schedule_conditions_status').show();
+            } else {
+                $('#schedule_conditions_status').hide();
             }
         }
     });
 }
+
+function LandroidRTKScheduler_loadConditionsStatus() {
+    var $body = $('#schedule_conditions_status_body');
+    $.ajax({
+        type: 'POST',
+        url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
+        data: {action: 'conditionsStatus', id: LandroidRTKScheduler_currentEqLogicId, apikey: LandroidRTKApikey},
+        dataType: 'json',
+        success: function (data) {
+            if (data.state != 'ok' || !data.result || !data.result.rows) {
+                return;
+            }
+            $body.empty();
+            $.each(data.result.rows, function (i, row) {
+                var icon = row.ok
+                    ? '<span style="color:#3c763d;"><i class="fas fa-check-circle"></i> OK</span>'
+                    : '<span style="color:#a94442;"><i class="fas fa-times-circle"></i> Non</span>';
+                $body.append(
+                    '<tr><td>' + row.label + '</td><td>' + icon
+                    + (row.detail ? ' <span class="text-muted" style="font-size:0.9em;">(' + row.detail + ')</span>' : '')
+                    + '</td></tr>'
+                );
+            });
+        }
+    });
+}
+
+$('#scheduletab').on('click', '#bt_refreshConditionsStatus', function () {
+    LandroidRTKScheduler_loadConditionsStatus();
+});
 
 function LandroidRTKScheduler_checkCurrentConfigSilently() {
     $.ajax({
@@ -483,6 +517,12 @@ $(document).on('click', '#bt_saveSchedule', function (e) {
                 LandroidRTKScheduler_hideResults();
                 $.fn.showAlert({message: '{{Programmation sauvegardée}}', level: 'success'});
                 LandroidRTKScheduler_refreshNextMow();
+                if ($('#sched_enabled').is(':checked')) {
+                    $('#schedule_conditions_status').show();
+                    LandroidRTKScheduler_loadConditionsStatus();
+                } else {
+                    $('#schedule_conditions_status').hide();
+                }
             }
         }
     });
