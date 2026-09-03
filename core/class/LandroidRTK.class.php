@@ -1,6 +1,7 @@
 <?php
 
 require_once dirname(__FILE__) . '/LandroidRTKCmd.class.php';
+require_once dirname(__FILE__) . '/LandroidRTKScheduler.class.php';
 
 class LandroidRTK extends eqLogic {
 
@@ -421,6 +422,11 @@ class LandroidRTK extends eqLogic {
     }
 
     public static function cron5() {
+        // Programmation automatique de tonte (fichier séparé, voir
+        // LandroidRTKScheduler.class.php) : doit tourner à chaque passage
+        // de ce cron, indépendamment du reste ci-dessous.
+        LandroidRTKScheduler::cronScheduler();
+
         // Si le démon tourne, il pousse déjà les mises à jour en continu
         // (toutes les ~10s) : inutile de ré-authentifier séparément toutes
         // les 5 minutes en plus, ça ne fait que doubler la charge sur

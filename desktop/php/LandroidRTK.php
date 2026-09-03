@@ -9,6 +9,21 @@ sendVarToJS('LandroidRTKApikey', LandroidRTK::getApiKey());
 $eqLogics = eqLogic::byType($plugin->getId());
 ?>
 
+<style>
+    /* Réduit la taille des cartes équipement de moitié, uniquement sur
+       cette page (ne touche pas au CSS global du core). */
+    .eqLogicThumbnailDisplay .eqLogicDisplayCard {
+        width: 90px !important;
+        min-width: 90px !important;
+        height: auto !important;
+        padding: 6px !important;
+        font-size: 0.85em;
+    }
+    .eqLogicThumbnailDisplay .eqLogicDisplayCard img {
+        max-height: 32px !important;
+    }
+</style>
+
 <div class="row row-overflow">
 
     <div class="col-xs-12 eqLogicThumbnailDisplay">
@@ -37,7 +52,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 $model_type = $eqLogic->getConfiguration('model_type', 'vision_generic');
                 $img_url = LandroidRTK::getModelImageUrl($model_type);
                 echo '<div class="eqLogicDisplayCard cursor ' . $opacity . '" data-eqLogic_id="' . $eqLogic->getId() . '" data-model-type="' . $model_type . '">';
-                echo '<img src="' . $img_url . '" style="max-height:60px;max-width:100%;">';
+                echo '<img src="' . $img_url . '" style="max-height:32px;max-width:100%;">';
                 echo '<br>';
                 echo '<span class="name">' . $eqLogic->getHumanName(true, true) . '</span>';
                 echo '</div>';
@@ -60,6 +75,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
             <li role="presentation"><a href="#" class="eqLogicAction" aria-controls="home" role="tab" data-toggle="tab" data-action="returnToThumbnailDisplay"><i class="fa fa-arrow-circle-left"></i></a></li>
             <li role="presentation" class="active"><a href="#eqlogictab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> {{Equipement}}</a></li>
             <li role="presentation"><a href="#commandtab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-list"></i> {{Commandes}}</a></li>
+            <li role="presentation"><a href="#scheduletab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-clock"></i> {{Programmation}}</a></li>
         </ul>
 
         <div class="tab-content">
@@ -154,9 +170,11 @@ $eqLogics = eqLogic::byType($plugin->getId());
                     </tbody>
                 </table>
             </div>
+            <?php include_file('desktop', 'LandroidRTKScheduler', 'php', 'LandroidRTK'); ?>
         </div>
     </div>
 </div>
 
 <?php include_file('desktop', 'LandroidRTK', 'js', 'LandroidRTK'); ?>
+<?php include_file('desktop', 'LandroidRTKScheduler', 'js', 'LandroidRTK'); ?>
 <?php include_file('core', 'plugin.template', 'js'); ?>
