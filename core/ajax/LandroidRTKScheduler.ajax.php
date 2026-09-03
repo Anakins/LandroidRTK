@@ -147,6 +147,15 @@ try {
         ajax::success(LandroidRTKScheduler::estimateNextMow($eqLogic, $config));
     }
 
+    if (init('action') == 'conditionsStatus') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic)) {
+            throw new Exception('Équipement introuvable');
+        }
+        $config = LandroidRTKScheduler::getConfig($eqLogic);
+        ajax::success(LandroidRTKScheduler::getConditionsStatus($eqLogic, $config));
+    }
+
     throw new Exception(__('Aucune méthode correspondante', __FILE__));
 } catch (\Throwable $e) {
     log::add('LandroidRTK', 'error', 'Scheduler ajax.php: erreur (' . get_class($e) . '): ' . $e->getMessage());

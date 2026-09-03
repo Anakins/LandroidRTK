@@ -15,6 +15,20 @@ if (!isConnect()) {
 
     <div id="schedule_next_mow" class="alert alert-info" style="display:none; margin:10px;"></div>
 
+    <div id="schedule_conditions_status" style="display:none; margin:10px; border:1px solid #ddd; border-radius:4px; padding:10px; background:#fff;">
+        <strong><i class="fas fa-list-check"></i> État des conditions de démarrage</strong>
+        <a class="pull-right cursor" id="bt_refreshConditionsStatus" title="Rafraîchir"><i class="fas fa-sync"></i></a>
+        <table class="table table-condensed" style="margin-top:8px; margin-bottom:0;">
+            <thead>
+                <tr>
+                    <th>Condition</th>
+                    <th style="width:220px;">État</th>
+                </tr>
+            </thead>
+            <tbody id="schedule_conditions_status_body"></tbody>
+        </table>
+    </div>
+
     <div class="alert alert-default" style="margin:10px; border:1px solid #ddd;">
         <strong><i class="fas fa-tools"></i> Outils sur la dernière tonte enregistrée</strong>
         <div style="margin-top:8px;">

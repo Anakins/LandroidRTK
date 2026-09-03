@@ -755,6 +755,153 @@ class LandroidRTKScheduler {
         }
     }
 
+    /**
+     * Tableau de statut "condition par condition" affiché en haut de
+     * l'onglet Programmation quand elle est active. Contrairement à
+     * evaluate() (qui s'arrête à la première condition non remplie),
+     * cette fonction évalue TOUJOURS toutes les conditions
+     * indépendamment les unes des autres, pour donner une vue
+     * d'ensemble complète de ce qui bloque (ou non) le démarrage.
+     */
+    public static function getConditionsStatus($eqLogic, $config) {
+        $state = self::getState($eqLogic);
+        $now = time();
+        $today = date('Y-m-d', $now);
+        $now_minutes = intval(date('H', $now)) * 60 + intval(date('i', $now));
+        $rows = array();
+
+        // --- Pas déjà tondu aujourd'hui ---
+        $already_mowed = ($state['last_mow_date'] == $today);
+        $rows[] = array(
+            'label' => 'Pas déjà tondu aujourd\'hui',
+            'ok' => !$already_mowed,
+            'detail' => $already_mowed ? 'Dernière tonte : aujourd\'hui' : ($state['last_mow_date'] ? 'Dernière tonte : ' . $state['last_mow_date'] : 'Aucune tonte enregistrée'),
+        );
+
+        // --- Espacement ---
+        $spacing_ok = true;
+        $spacing_detail = '—';
+        if (!empty($state['last_mow_date']) && !$already_mowed) {
+            $diff_days = (strtotime($today) - strtotime($state['last_mow_date'])) / 86400;
+            $spacing_ok = ($diff_days >= intval($config['spacing_days']));
+            $spacing_detail = round($diff_days) . ' jour(s) depuis la dernière tonte (min. ' . intval($config['spacing_days']) . ')';
+        } elseif (empty($state['last_mow_date'])) {
+            $spacing_detail = 'Aucune tonte enregistrée pour l\'instant';
+        }
+        $rows[] = array('label' => 'Espacement jours de tontes respecté', 'ok' => $spacing_ok, 'detail' => $spacing_detail);
+
+        // --- Plage horaire ---
+        $start_resolved = self::resolveTimeField($config['time_start_cmd_id']);
+        $end_resolved = self::resolveTimeField($config['time_end_cmd_id']);
+        $start_min = ($start_resolved['mode'] == 'fixed') ? $start_resolved['minutes'] : self::parseHM(is_object($start_resolved['cmd']) ? $start_resolved['cmd']->execCmd() : null);
+        $end_min = ($end_resolved['mode'] == 'fixed') ? $end_resolved['minutes'] : self::parseHM(is_object($end_resolved['cmd']) ? $end_resolved['cmd']->execCmd() : null);
+        $time_ok = false;
+        $time_detail = 'Heure de début/fin non résolue';
+        if ($start_min !== null && $end_min !== null) {
+            $latest_start = $end_min - intval($config['margin_minutes']);
+            $time_ok = ($now_minutes >= $start_min && $now_minutes <= $latest_start);
+            $time_detail = sprintf('%02d:%02d', intdiv($start_min, 60), $start_min % 60) . ' – ' . sprintf('%02d:%02d', intdiv($latest_start, 60), $latest_start % 60) . ' (marge incluse)';
+        }
+        $rows[] = array('label' => 'Dans la plage horaire autorisée', 'ok' => $time_ok, 'detail' => $time_detail);
+
+        // --- Pluie (capteur robot et/ou externe) ---
+        $rain_triggered = false;
+        $rain_label = '';
+        if (!empty($config['rain_own_enabled']) && $config['rain_own_enabled'] == '1') {
+            $rain_cmd = $eqLogic->getCmd(null, 'rain_detected');
+            if (is_object($rain_cmd)) {
+                $val = trim((string) $rain_cmd->execCmd());
+                if (strcasecmp($val, 'oui') == 0 || $val == '1') {
+                    $rain_triggered = true;
+                    $rain_label = 'capteur pluie du robot';
+                }
+            }
+        }
+        if (!$rain_triggered && !empty($config['rain_extra_cmd_id'])) {
+            $cmd = self::resolveCmd($config['rain_extra_cmd_id']);
+            if (is_object($cmd)) {
+                $val = trim((string) $cmd->execCmd());
+                $expected = trim((string) $config['rain_extra_value']);
+                $is_numeric_cmp = is_numeric($val) && is_numeric($expected);
+                $matches = $is_numeric_cmp ? (floatval($val) == floatval($expected)) : (strcasecmp($val, $expected) == 0);
+                if ($config['rain_extra_operator'] == '!=') {
+                    $matches = !$matches;
+                }
+                if ($matches) {
+                    $rain_triggered = true;
+                    $rain_label = $cmd->getName();
+                }
+            }
+        }
+        $rows[] = array('label' => 'Aucune pluie détectée actuellement', 'ok' => !$rain_triggered, 'detail' => $rain_triggered ? ('Pluie détectée : ' . $rain_label) : 'Pas de pluie');
+
+        // --- Délai post-pluie ---
+        $rain_wait_ok = empty($state['rain_interrupt_until']) || $now >= $state['rain_interrupt_until'];
+        $rain_wait_detail = '—';
+        if (!empty($state['rain_interrupt_until']) && $now < $state['rain_interrupt_until']) {
+            $rain_wait_detail = 'Encore ' . ceil(($state['rain_interrupt_until'] - $now) / 60) . ' min avant reprise possible';
+        }
+        $rows[] = array('label' => 'Pas en attente post-pluie', 'ok' => $rain_wait_ok, 'detail' => $rain_wait_detail);
+
+        // --- Humidité ---
+        $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
+        $threshold = floatval($config['humidity_threshold']);
+        $humidity_below = is_numeric($humidity_val) && floatval($humidity_val) <= $threshold;
+        $duration_needed = intval($config['humidity_duration_minutes']) * 60;
+        $humidity_wait_ok = true;
+        if ($humidity_below && !empty($state['humidity_low_since'])) {
+            $humidity_wait_ok = ($now - $state['humidity_low_since']) >= $duration_needed;
+        } elseif ($humidity_below && empty($state['humidity_low_since'])) {
+            $humidity_wait_ok = ($duration_needed <= 0);
+        }
+        $humidity_ok = $humidity_below && $humidity_wait_ok;
+        $humidity_detail = is_numeric($humidity_val) ? ($humidity_val . '% (seuil ' . $threshold . '%)') : 'Valeur indisponible';
+        if ($humidity_below && !$humidity_wait_ok) {
+            $humidity_detail .= ' — sous le seuil, en attente du délai de confirmation';
+        }
+        $rows[] = array('label' => 'Humidité sous le seuil (délai inclus)', 'ok' => $humidity_ok, 'detail' => $humidity_detail);
+
+        // --- Température (optionnelle) ---
+        if (!empty($config['temperature_cmd_id'])) {
+            $temp_val = self::getTemperatureValue($config);
+            $temp_min = floatval($config['temperature_min']);
+            $temp_max = floatval($config['temperature_max']);
+            $temp_min_ok = is_numeric($temp_val) && floatval($temp_val) >= $temp_min;
+            $temp_max_ok = is_numeric($temp_val) && floatval($temp_val) <= $temp_max;
+            $temp_detail = is_numeric($temp_val) ? ($temp_val . '°C') : 'Valeur indisponible';
+            $rows[] = array('label' => 'Température ≥ seuil minimum (' . $temp_min . '°C)', 'ok' => $temp_min_ok, 'detail' => $temp_detail);
+            $rows[] = array('label' => 'Température ≤ seuil maximum (' . $temp_max . '°C)', 'ok' => $temp_max_ok, 'detail' => $temp_detail);
+        }
+
+        // --- Condition météo (optionnelle) ---
+        if (!empty($config['condition_id_cmd_id']) || !empty($config['condition_cmd_id'])) {
+            $condition_id = self::getCmdValue($config['condition_id_cmd_id']);
+            $weather_ok = self::isGoodWeather($condition_id);
+            $condition_label = self::getConditionLabel($config);
+            $rows[] = array('label' => 'Condition météo actuelle acceptée', 'ok' => $weather_ok, 'detail' => $condition_label !== '' ? $condition_label : 'Valeur indisponible');
+        }
+
+        // --- Batterie ---
+        $battery_val = self::getBatteryValue($eqLogic);
+        $battery_min = floatval($config['battery_min_percent']);
+        $battery_ok = is_numeric($battery_val) && floatval($battery_val) >= $battery_min;
+        $rows[] = array(
+            'label' => 'Batterie suffisante (min. ' . $battery_min . '%)',
+            'ok' => $battery_ok,
+            'detail' => is_numeric($battery_val) ? ($battery_val . '%') : 'Valeur indisponible',
+        );
+
+        $all_ok = true;
+        foreach ($rows as $r) {
+            if (!$r['ok']) {
+                $all_ok = false;
+                break;
+            }
+        }
+
+        return array('rows' => $rows, 'all_ok' => $all_ok);
+    }
+
     public static function evaluate($eqLogic) {
         $config = self::getConfig($eqLogic);
         self::syncWidgetCommands($eqLogic); // garde le widget à jour même si désactivé

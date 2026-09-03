@@ -2,6 +2,7 @@
 
 ## 1.1.0 (beta)
 - **Programmation automatique de tonte** (nouvel onglet dédié) : plage horaire, espacement entre tontes, sécurité pluie (capteur natif du robot et/ou capteur externe), seuil et délai d'humidité, plage de température min/max (protection gel et canicule), seuil de batterie minimum, condition météo (via un plugin météo tiers), notifications personnalisables (Discord, appli mobile...).
+- Tableau "État des conditions de démarrage" en haut de l'onglet Programmation (quand elle est active) : détail condition par condition (OK/Non) pour comprendre en un coup d'œil ce qui bloque un démarrage.
 - Interruption automatique en cas de pluie pendant une tonte en cours, avec délai d'attente réglable (40 à 120 min) avant nouvelle tentative.
 - Vérification systématique de la batterie avant tout démarrage (y compris après une reprise post-pluie) : évite d'envoyer un ordre de démarrage que Worx refuserait silencieusement faute de batterie suffisante.
 - Détection automatique des équipements manquants (ex: plugin météo tiers désinstallé) : la programmation ne tente jamais de démarrer dans ce cas, avec avertissement dans le Centre de Messages Jeedom et directement dans l'onglet Programmation.
