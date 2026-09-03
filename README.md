@@ -41,16 +41,16 @@ Pilotage des tondeuses robot **Worx Landroid Vision Cloud** (2WD/4WD, avec RTK/G
 Ce plugin s'installe comme n'importe quel plugin Jeedom, directement depuis le **[Market Jeedom](https://market.jeedom.com)** — aucune manipulation particulière n'est nécessaire.
 
 1. Depuis Jeedom : `Plugins > Gestion des plugins > Market`, recherche **"Landroid RTK"** (ou directement sur le [Market en ligne](https://market.jeedom.com))
-2. Installe la version stable, ou la version bêta si tu veux suivre les développements en cours
-3. Une fois installé, active le plugin et lance l'installation des dépendances depuis l'onglet **Dépendances** de sa fiche (Jeedom s'en charge automatiquement)
+2. Installez la version stable, ou la version bêta si vous voulez suivre les développements en cours
+3. Une fois installé, activez le plugin et lancez l'installation des dépendances depuis l'onglet **Dépendances** de sa fiche (Jeedom s'en charge automatiquement)
 
 Le code source est disponible sur [GitHub](https://github.com/Anakins/LandroidRTK) à titre indicatif ; le Market reste le seul canal d'installation recommandé.
 
 ## 4. Configuration du compte Worx
 
 1. `Plugins > Landroid RTK > Configuration`
-2. Renseigne l'email et le mot de passe de ton compte Worx
-3. Clique sur **Synchroniser les tondeuses** — tes tondeuses *Vision Cloud* apparaissent automatiquement comme équipements
+2. Renseignez l'email et le mot de passe de votre compte Worx
+3. Cliquez sur **Synchroniser les tondeuses** — vos tondeuses *Vision Cloud* apparaissent automatiquement comme équipements
 4. Démarre le démon (onglet **Démon** de la fiche du plugin) pour un suivi en temps réel
 
 ## 5. Commandes disponibles par équipement
@@ -96,12 +96,12 @@ Dès que la programmation est **activée**, un tableau apparaît tout en haut de
 ### Étapes de configuration
 
 1. **Plage horaire** : heure de début/fin (soit un tag de commande Jeedom du style `#[Objet][Équipement][Commande]#`, soit une heure fixe au format `HMM`/`HHMM`, ex: `800` = 08h00), et une marge de sécurité en minutes avant l'heure de fin
-   > 💡 **Astuce** : utilise le **coucher du soleil** (fourni par un plugin météo externe) comme heure de fin, et règle la marge sur le **temps que met habituellement ton robot à tondre toute la pelouse**. Le robot ne démarrera alors jamais une tonte qui risquerait de se terminer une fois la nuit tombée.
+   > 💡 **Astuce** : utilisez le **coucher du soleil** (fourni par un plugin météo externe) comme heure de fin, et réglez la marge sur le **temps que met habituellement votre robot à tondre toute la pelouse**. Le robot ne démarrera alors jamais une tonte qui risquerait de se terminer une fois la nuit tombée.
    > 🌧️🏠 Cette même marge sert aussi de "durée de tonte estimée" pour détecter une pluie arrivant **pendant** une tonte en cours : dans ce cas, une notification "🌧️🏠 Il pleut, {robot} rentre à sa base" est envoyée, la tonte du jour est considérée comme non effectuée, et le robot ne pourra pas redémarrer avant le **délai réglable** décrit ci-dessous (par défaut 1h) — même si l'humidité redescend entre temps, le temps que le sol absorbe une grosse pluie. Pendant ce délai, l'humidité continue d'être surveillée normalement : si elle remonte au-dessus du seuil, le cycle d'attente habituel reprend automatiquement, avec une notification de reprise précisant explicitement qu'il s'agit d'une reprise après un arrêt pluie. Un court rappel "(tonte interrompue par la pluie)" apparaît alors à côté de la prochaine estimation de tonte.
 2. **Espacement jours de tontes** : tondre tous les combien de jours (1 à 28)
-3. **Pluie** : le capteur natif du robot (case à cocher, pense à régler le délai pluie à 0 dans l'appli Worx — le plugin vérifie ce réglage automatiquement et avertit si ce n'est pas le cas) et/ou un capteur externe optionnel (avec opérateur `==`/`≠`), et le **délai avant redémarrage après pluie** (40 à 120 min, par défaut 60 min — le minimum de 40 min laisse le temps à un plugin météo externe de rafraîchir sa mesure d'humidité, certains ne se mettant à jour que toutes les 30 min) décrit au point précédent
+3. **Pluie** : le capteur natif du robot (case à cocher, pensez à régler le délai pluie à 0 dans l'appli Worx — le plugin vérifie ce réglage automatiquement et avertit si ce n'est pas le cas) et/ou un capteur externe optionnel (avec opérateur `==`/`≠`), et le **délai avant redémarrage après pluie** (40 à 120 min, par défaut 60 min — le minimum de 40 min laisse le temps à un plugin météo externe de rafraîchir sa mesure d'humidité, certains ne se mettant à jour que toutes les 30 min) décrit au point précédent
 4. **Humidité** : une commande obligatoire renvoyant un nombre entre 0 et 100, un seuil max, et un délai minimum sous ce seuil
-5. **Température** *(optionnelle)* : un tag de commande Jeedom (obligatoirement — pas de valeur fixe saisie à la main, puisqu'elle changerait sans arrêt), provenant d'un capteur externe ou d'un plugin météo, avec deux seuils :
+5. **Température** *(optionnelle)* : juste un équipement Jeedom pointant vers un capteur de température (obligatoirement — pas de valeur fixe saisie à la main, puisqu'elle changerait sans arrêt), provenant d'un capteur externe ou d'un plugin météo, avec deux seuils :
    - **Seuil minimum** (6 à 18°C, par défaut 10°C) : protection gel — le robot ne tond pas en dessous, pour ne pas abîmer une pelouse potentiellement gelée.
    - **Seuil maximum** (30 à 50°C, par défaut 40°C) : protection canicule — le robot ne tond pas au-dessus.
 
@@ -112,15 +112,15 @@ Dès que la programmation est **activée**, un tableau apparaît tout en haut de
 8. **Notifications** : autant de commandes que voulu (Discord, appli mobile...), avec titre personnalisable et choix du format (HTML avec `<br/>`, ou texte brut pour Discord)
    > 📋 Le contenu de chaque notification (lancement de tonte, tonte annulée...) suit toujours le même ordre : météo (condition) → température (si réglée) → humidité → batterie. Le même détail est aussi écrit dans les logs du plugin (niveaux `info` et `debug`), pour le retrouver facilement en cas de dépannage.
 
-Pour chaque champ "commande", clique sur l'icône ⬜ à côté du champ pour ouvrir le **sélecteur natif Jeedom** (le même que dans les scénarios). Un aperçu de la valeur actuelle s'affiche automatiquement à côté (en vert si valide, en rouge sinon) ; pour le code météo, le libellé anglais correspondant s'affiche aussi.
+Pour chaque champ "commande", cliquez sur l'icône ⬜ à côté du champ pour ouvrir le **sélecteur natif Jeedom** (le même que dans les scénarios). Un aperçu de la valeur actuelle s'affiche automatiquement à côté (en vert si valide, en rouge sinon) ; pour le code météo, le libellé anglais correspondant s'affiche aussi.
 
 ### Plugin météo recommandé
 
-Cette fonctionnalité nécessite un plugin météo tiers fournissant un `condition_id` numérique. Recommandé : **["Weather Forecast, CAP alerts"](https://market.jeedom.com)** (par jpty) — et peut aussi fournir l'humidité extérieure et/ou la température. Le plugin météo officiel Jeedom fonctionne également.
+Cette fonctionnalité nécessite un plugin météo tiers fournissant un `condition_id` numérique. Recommandé : **["Weather Forecast, CAP alerts"](https://market.jeedom.com)** (par jpty) — et peut aussi fournir l'humidité extérieure et/ou la température. Le [plugin météo officiel Jeedom](https://market.jeedom.com/index.php?v=d&p=market_display&id=7) fonctionne également.
 
 ### Bouton "Tester"
 
-Avant de pouvoir activer la programmation, clique sur **"Tester la configuration"** — il vérifie chaque champ (existence des commandes, plages de valeurs, format des heures...) et affiche toutes les erreurs trouvées. **La case "Activer" ne peut rester cochée que si ce test passe sans erreur** (revérifié aussi côté serveur à la sauvegarde, jamais uniquement côté navigateur).
+Avant de pouvoir activer la programmation, cliquez sur **"Tester la configuration"** — il vérifie chaque champ (existence des commandes, plages de valeurs, format des heures...) et affiche toutes les erreurs trouvées. **La case "Activer" ne peut rester cochée que si ce test passe sans erreur** (revérifié aussi côté serveur à la sauvegarde, jamais uniquement côté navigateur).
 
 Chaque ligne de notification a aussi son propre bouton de test individuel (envoie un vrai message, préfixé "[TEST]", avec le contenu réel qu'aurait le message de production).
 
@@ -164,7 +164,7 @@ Dans ce cas :
 ## 7. Limitations connues
 
 - La forme/l'angle de tonte sont **en lecture seule** : l'API Worx cloud ne permet pas (à ce jour, via `pyworxcloud`) de les modifier à distance.
-- Worx applique une limite de requêtes sur son API cloud. Évite de redémarrer le démon de façon répétée et rapprochée, au risque d'un blocage temporaire de ton compte (visible aussi dans l'application Worx officielle le temps que ça se lève).
+- Worx applique une limite de requêtes sur son API cloud. Évitez de redémarrer le démon de façon répétée et rapprochée, au risque d'un blocage temporaire de votre compte (visible aussi dans l'application Worx officielle le temps que ça se lève).
 
 ## 8. Mise à jour du plugin
 
@@ -172,7 +172,7 @@ Comme pour l'installation, les mises à jour se gèrent normalement depuis `Plug
 
 ## 9. Support
 
-- Ouvre une [issue GitHub](../../issues) pour un bug ou une suggestion
+- Ouvrez une [issue GitHub](../../issues) pour un bug ou une suggestion
 - Ou passe par le [forum Jeedom](https://community.jeedom.com), tag `plugin-landroidrtk`
 
 ## Licence

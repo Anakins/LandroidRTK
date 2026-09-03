@@ -94,13 +94,13 @@ class LandroidRTK extends eqLogic {
         $email = self::getEmail();
         $password = self::getPassword();
         if ($email == '' || $password == '') {
-            log::add('LandroidRTK', 'error', 'Email ou mot de passe Worx manquant. Va dans la configuration du plugin pour les renseigner.');
+            log::add('LandroidRTK', 'error', 'Email ou mot de passe Worx manquant. Allez dans la configuration du plugin pour les renseigner.');
             return null;
         }
 
         $python = self::getVenvPython();
         if (!file_exists($python)) {
-            log::add('LandroidRTK', 'error', 'Environnement Python introuvable (' . $python . '). Vérifie que les dépendances du plugin sont bien installées (page Dépendances).');
+            log::add('LandroidRTK', 'error', 'Environnement Python introuvable (' . $python . '). Vérifiez que les dépendances du plugin sont bien installées (page Dépendances).');
             return null;
         }
 
@@ -604,7 +604,7 @@ class LandroidRTK extends eqLogic {
         sleep(2);
         if (!is_dir('/proc/' . $pid)) {
             @unlink($pid_file);
-            $msg = 'Le démon a démarré (pid ' . $pid . ') puis s\'est arrêté immédiatement. Regarde le log du démon pour la raison exacte.';
+            $msg = 'Le démon a démarré (pid ' . $pid . ') puis s\'est arrêté immédiatement. Regardez le log du démon pour la raison exacte.';
             log::add('LandroidRTK', 'error', 'deamon_start(): ' . $msg);
             message::add('LandroidRTK', $msg);
             throw new Exception($msg);
