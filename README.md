@@ -137,10 +137,11 @@ En plus des commandes manuelles de base, le widget affiche : l'état de la progr
 
 ### Robustesse
 
-- Si un équipement configuré est supprimé de Jeedom, la programmation ne démarre pas et un message clair apparaît dans les logs `LandroidRTK` **et** dans le centre de messages Jeedom (pas de plantage).
+- **Équipement supprimé (ex: désinstallation d'un plugin météo tiers)** : si une commande requise par la programmation (humidité, code météo, capteur de pluie externe, heure de début/fin en tag...) disparaît de Jeedom, la programmation ne tente **jamais** de démarrer le robot dans ce cas — aucun risque d'erreur ni de faux "tonte lancée". Un message clair apparaît à la fois dans les logs `LandroidRTK` et dans le **Centre de Messages** de Jeedom (icône cloche), au maximum une fois par jour et par équipement manquant pour ne pas spammer à chaque passage du cron. En plus de ça, l'onglet Programmation affiche automatiquement le même avertissement dès son ouverture (sans avoir besoin de cliquer sur "Tester"), tant que le problème n'est pas corrigé.
 - Si les pages de vérification des codes météo (OpenWeatherMap/WeatherAPI) sont injoignables, un avertissement est loggé mais **n'empêche jamais l'activation**.
 - Le cron dédié à la programmation tourne toutes les 5 minutes, indépendamment du reste du plugin (pas d'appel supplémentaire à l'API Worx).
 - L'état interne (dernière tonte, suivi d'humidité, délai post-pluie...) est **persisté en base de données** à chaque changement : il survit donc à un redémarrage de Jeedom ou du démon, sans aucune action nécessaire.
+- Les commandes du widget dashboard (curseurs, boutons Activer/Désactiver...) sont **entièrement re-synchronisées à chaque sauvegarde et à chaque passage du cron** : nom, bornes, lien vers leur commande info associée — même si elles avaient été créées par une version antérieure du plugin avec une configuration différente ou incomplète (auto-réparation, aucune action manuelle nécessaire).
 
 ---
 

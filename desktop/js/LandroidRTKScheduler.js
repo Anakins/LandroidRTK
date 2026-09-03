@@ -36,6 +36,34 @@ function LandroidRTKScheduler_loadConfig(_eqLogic_id) {
                 return;
             }
             LandroidRTKScheduler_fillForm(data.result);
+            // Vérification silencieuse à l'ouverture de l'onglet (sans
+            // envoyer de notif de test) : si la programmation est active
+            // mais qu'un équipement requis a disparu depuis (plugin
+            // météo tiers désinstallé, capteur supprimé...), on le
+            // signale tout de suite ici, en plus de l'avertissement déjà
+            // envoyé dans le Centre de Messages Jeedom par le cron.
+            if (data.result.enabled == '1') {
+                LandroidRTKScheduler_checkCurrentConfigSilently();
+            }
+        }
+    });
+}
+
+function LandroidRTKScheduler_checkCurrentConfigSilently() {
+    $.ajax({
+        type: 'POST',
+        url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
+        data: {
+            action: 'validateSchedule',
+            id: LandroidRTKScheduler_currentEqLogicId,
+            apikey: LandroidRTKApikey,
+            config: JSON.stringify(LandroidRTKScheduler_buildConfig()),
+        },
+        dataType: 'json',
+        success: function (data) {
+            if (data.state == 'ok' && data.result && data.result.errors && data.result.errors.length) {
+                LandroidRTKScheduler_showResults(data.result.errors, data.result.warnings || []);
+            }
         }
     });
 }

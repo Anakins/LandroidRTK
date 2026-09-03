@@ -546,6 +546,7 @@ class LandroidRTKScheduler {
         $battery_cmd = $eqLogic->getCmd(null, 'battery');
         if (!is_object($battery_cmd)) {
             $errors[] = "La commande de batterie (\"battery\") est introuvable sur cet équipement — attends la prochaine synchronisation avec l'API Worx, ou vérifie que l'équipement est bien à jour.";
+            self::notifyMissingEquipment($eqLogic, "batterie du robot");
         } else {
             $val = $battery_cmd->execCmd();
             if (!is_numeric($val) || $val < 0 || $val > 100) {
@@ -619,13 +620,32 @@ class LandroidRTKScheduler {
         return array('errors' => $errors, 'warnings' => $warnings);
     }
 
+    /**
+     * Avertit (log erreur + Centre de Messages Jeedom) qu'un équipement
+     * requis par la programmation a disparu (ex: plugin météo tiers
+     * désinstallé, capteur supprimé...). Limité à 1 notification par
+     * équipement manquant et par jour, pour éviter le spam à chaque
+     * passage du cron tant que le problème n'est pas corrigé.
+     */
     private static function notifyMissingEquipment($eqLogic, $label) {
-        $msg = 'Programmation de tonte (' . $eqLogic->getHumanName() . ') : équipement manquant pour "' . $label . '" (supprimé de Jeedom ?). La programmation ne peut pas démarrer tant que ce n\'est pas corrigé.';
+        $state = self::getState($eqLogic);
+        $today = date('Y-m-d');
+        if (!isset($state['missing_equipment_notified']) || !is_array($state['missing_equipment_notified'])) {
+            $state['missing_equipment_notified'] = array();
+        }
+        if (isset($state['missing_equipment_notified'][$label]) && $state['missing_equipment_notified'][$label] == $today) {
+            return; // déjà notifié aujourd'hui pour cet équipement précis
+        }
+
+        $msg = 'Programmation de tonte (' . $eqLogic->getHumanName() . ') : équipement manquant pour "' . $label . '" (supprimé de Jeedom, ou plugin tiers désinstallé — ex: plugin météo). La programmation ne peut pas démarrer tant que ce n\'est pas corrigé : va dans l\'onglet Programmation pour reconfigurer ce champ.';
         log::add('LandroidRTK', 'error', $msg);
         try {
             message::add('LandroidRTK', $msg);
         } catch (\Throwable $e) {
         }
+
+        $state['missing_equipment_notified'][$label] = $today;
+        self::saveState($eqLogic, $state);
     }
 
     /* ---------------------------------------------------------------- */
@@ -1319,6 +1339,15 @@ class LandroidRTKScheduler {
      * après chaque sauvegarde de la programmation ET par le cron.
      */
     public static function syncWidgetCommands($eqLogic) {
+        // IMPORTANT : chaque commande est créée si absente, PUIS ses
+        // propriétés (nom, config, lien "commande info liée"...) sont
+        // TOUJOURS réappliquées et sauvegardées, même si elle existait
+        // déjà. Sans ça, une commande créée par une version antérieure
+        // du plugin (avant l'ajout du lien slider<->info par exemple)
+        // resterait figée avec son ancienne config pour toujours, même
+        // après mise à jour du plugin — c'est ce qui causait le nom
+        // figé et le curseur non lié constatés sur une install existante.
+
         // Info "Programmation" (Oui/Non, lecture seule) + 2 boutons
         // explicites Activer/Désactiver (plus lisible qu'une simple case
         // à cocher, comme les boutons Start/Stop/Maison existants).
@@ -1326,55 +1355,57 @@ class LandroidRTKScheduler {
         if (!is_object($cmd_enabled)) {
             $cmd_enabled = new LandroidRTKCmd();
             $cmd_enabled->setLogicalId('schedule_enabled');
-            $cmd_enabled->setName('Programmation');
-            $cmd_enabled->setType('info');
-            $cmd_enabled->setSubType('binary');
-            $cmd_enabled->setGeneric_type('');
             $cmd_enabled->setEqLogic_id($eqLogic->getId());
-            $cmd_enabled->setOrder(18);
-            $cmd_enabled->setDisplay('forceReturnLineAfter', '1');
-            $cmd_enabled->save();
         }
+        $cmd_enabled->setName('Programmation');
+        $cmd_enabled->setType('info');
+        $cmd_enabled->setSubType('binary');
+        $cmd_enabled->setGeneric_type('');
+        $cmd_enabled->setOrder(18);
+        $cmd_enabled->setDisplay('forceReturnLineAfter', '1');
+        $cmd_enabled->save();
+
         $cmd_activate = $eqLogic->getCmd(null, 'schedule_activate');
         if (!is_object($cmd_activate)) {
             $cmd_activate = new LandroidRTKCmd();
             $cmd_activate->setLogicalId('schedule_activate');
-            $cmd_activate->setName('Activer programmation');
-            $cmd_activate->setType('action');
-            $cmd_activate->setSubType('other');
-            $cmd_activate->setGeneric_type('');
             $cmd_activate->setEqLogic_id($eqLogic->getId());
-            $cmd_activate->setOrder(18);
-            $cmd_activate->save();
         }
+        $cmd_activate->setName('Activer programmation');
+        $cmd_activate->setType('action');
+        $cmd_activate->setSubType('other');
+        $cmd_activate->setGeneric_type('');
+        $cmd_activate->setOrder(18);
+        $cmd_activate->save();
+
         $cmd_deactivate = $eqLogic->getCmd(null, 'schedule_deactivate');
         if (!is_object($cmd_deactivate)) {
             $cmd_deactivate = new LandroidRTKCmd();
             $cmd_deactivate->setLogicalId('schedule_deactivate');
-            $cmd_deactivate->setName('Désactiver programmation');
-            $cmd_deactivate->setType('action');
-            $cmd_deactivate->setSubType('other');
-            $cmd_deactivate->setGeneric_type('');
             $cmd_deactivate->setEqLogic_id($eqLogic->getId());
-            $cmd_deactivate->setOrder(18);
-            $cmd_deactivate->setDisplay('forceReturnLineAfter', '1');
-            $cmd_deactivate->save();
         }
+        $cmd_deactivate->setName('Désactiver programmation');
+        $cmd_deactivate->setType('action');
+        $cmd_deactivate->setSubType('other');
+        $cmd_deactivate->setGeneric_type('');
+        $cmd_deactivate->setOrder(18);
+        $cmd_deactivate->setDisplay('forceReturnLineAfter', '1');
+        $cmd_deactivate->save();
 
         // Info "Dernière tonte" (texte, lecture seule)
         $cmd_last = $eqLogic->getCmd(null, 'schedule_last_mow');
         if (!is_object($cmd_last)) {
             $cmd_last = new LandroidRTKCmd();
             $cmd_last->setLogicalId('schedule_last_mow');
-            $cmd_last->setName('Dernière tonte');
-            $cmd_last->setType('info');
-            $cmd_last->setSubType('string');
-            $cmd_last->setGeneric_type('');
             $cmd_last->setEqLogic_id($eqLogic->getId());
-            $cmd_last->setOrder(19);
-            $cmd_last->setDisplay('forceReturnLineAfter', '1');
-            $cmd_last->save();
         }
+        $cmd_last->setName('Dernière tonte');
+        $cmd_last->setType('info');
+        $cmd_last->setSubType('string');
+        $cmd_last->setGeneric_type('');
+        $cmd_last->setOrder(19);
+        $cmd_last->setDisplay('forceReturnLineAfter', '1');
+        $cmd_last->save();
 
         // Info "Prochaine tonte" (texte COURT, résumé pour le widget —
         // différent du texte long de l'onglet Programmation)
@@ -1382,111 +1413,114 @@ class LandroidRTKScheduler {
         if (!is_object($cmd_next)) {
             $cmd_next = new LandroidRTKCmd();
             $cmd_next->setLogicalId('schedule_next_mow');
-            $cmd_next->setName('Prochaine tonte');
-            $cmd_next->setType('info');
-            $cmd_next->setSubType('string');
-            $cmd_next->setGeneric_type('');
             $cmd_next->setEqLogic_id($eqLogic->getId());
-            $cmd_next->setOrder(20);
-            $cmd_next->setDisplay('forceReturnLineAfter', '1');
-            $cmd_next->save();
         }
+        $cmd_next->setName('Prochaine tonte');
+        $cmd_next->setType('info');
+        $cmd_next->setSubType('string');
+        $cmd_next->setGeneric_type('');
+        $cmd_next->setOrder(20);
+        $cmd_next->setDisplay('forceReturnLineAfter', '1');
+        $cmd_next->save();
 
         // Marge fin de journée : info numérique + action curseur (slider)
         $cmd_margin_info = $eqLogic->getCmd(null, 'schedule_margin');
         if (!is_object($cmd_margin_info)) {
             $cmd_margin_info = new LandroidRTKCmd();
             $cmd_margin_info->setLogicalId('schedule_margin');
-            $cmd_margin_info->setName('Marge fin de journée');
-            $cmd_margin_info->setType('info');
-            $cmd_margin_info->setSubType('numeric');
-            $cmd_margin_info->setUnite('min');
-            $cmd_margin_info->setGeneric_type('');
             $cmd_margin_info->setEqLogic_id($eqLogic->getId());
-            $cmd_margin_info->setOrder(21);
-            $cmd_margin_info->setDisplay('forceReturnLineAfter', '1');
-            $cmd_margin_info->save();
         }
+        $cmd_margin_info->setName('Marge fin de journée');
+        $cmd_margin_info->setType('info');
+        $cmd_margin_info->setSubType('numeric');
+        $cmd_margin_info->setUnite('min');
+        $cmd_margin_info->setGeneric_type('');
+        $cmd_margin_info->setOrder(21);
+        $cmd_margin_info->setDisplay('forceReturnLineAfter', '1');
+        $cmd_margin_info->save();
+
         $cmd_margin_action = $eqLogic->getCmd(null, 'schedule_margin_set');
         if (!is_object($cmd_margin_action)) {
             $cmd_margin_action = new LandroidRTKCmd();
             $cmd_margin_action->setLogicalId('schedule_margin_set');
-            $cmd_margin_action->setName('Régler marge fin de journée');
-            $cmd_margin_action->setType('action');
-            $cmd_margin_action->setSubType('slider');
-            $cmd_margin_action->setGeneric_type('');
             $cmd_margin_action->setEqLogic_id($eqLogic->getId());
-            $cmd_margin_action->setOrder(21);
-            $cmd_margin_action->setConfiguration('minValue', 0);
-            $cmd_margin_action->setConfiguration('maxValue', 600);
-            $cmd_margin_action->setConfiguration('updateCmdId', $cmd_margin_info->getId());
-            $cmd_margin_action->setDisplay('forceReturnLineAfter', '1');
-            $cmd_margin_action->save();
         }
+        $cmd_margin_action->setName('Régler marge fin de journée');
+        $cmd_margin_action->setType('action');
+        $cmd_margin_action->setSubType('slider');
+        $cmd_margin_action->setGeneric_type('');
+        $cmd_margin_action->setOrder(21);
+        $cmd_margin_action->setConfiguration('minValue', 0);
+        $cmd_margin_action->setConfiguration('maxValue', 600);
+        $cmd_margin_action->setConfiguration('updateCmdId', $cmd_margin_info->getId());
+        $cmd_margin_action->setDisplay('forceReturnLineAfter', '1');
+        $cmd_margin_action->save();
 
         // Espacement tontes : info numérique + action curseur (slider)
         $cmd_spacing_info = $eqLogic->getCmd(null, 'schedule_spacing');
         if (!is_object($cmd_spacing_info)) {
             $cmd_spacing_info = new LandroidRTKCmd();
             $cmd_spacing_info->setLogicalId('schedule_spacing');
-            $cmd_spacing_info->setName('Espacement tontes');
-            $cmd_spacing_info->setType('info');
-            $cmd_spacing_info->setSubType('numeric');
-            $cmd_spacing_info->setUnite('j');
-            $cmd_spacing_info->setGeneric_type('');
             $cmd_spacing_info->setEqLogic_id($eqLogic->getId());
-            $cmd_spacing_info->setOrder(22);
-            $cmd_spacing_info->setDisplay('forceReturnLineAfter', '1');
-            $cmd_spacing_info->save();
         }
+        $cmd_spacing_info->setName('Espacement tontes');
+        $cmd_spacing_info->setType('info');
+        $cmd_spacing_info->setSubType('numeric');
+        $cmd_spacing_info->setUnite('j');
+        $cmd_spacing_info->setGeneric_type('');
+        $cmd_spacing_info->setOrder(22);
+        $cmd_spacing_info->setDisplay('forceReturnLineAfter', '1');
+        $cmd_spacing_info->save();
+
         $cmd_spacing_action = $eqLogic->getCmd(null, 'schedule_spacing_set');
         if (!is_object($cmd_spacing_action)) {
             $cmd_spacing_action = new LandroidRTKCmd();
             $cmd_spacing_action->setLogicalId('schedule_spacing_set');
-            $cmd_spacing_action->setName('Régler espacement tontes');
-            $cmd_spacing_action->setType('action');
-            $cmd_spacing_action->setSubType('slider');
-            $cmd_spacing_action->setGeneric_type('');
             $cmd_spacing_action->setEqLogic_id($eqLogic->getId());
-            $cmd_spacing_action->setOrder(22);
-            $cmd_spacing_action->setConfiguration('minValue', 1);
-            $cmd_spacing_action->setConfiguration('maxValue', 28);
-            $cmd_spacing_action->setConfiguration('updateCmdId', $cmd_spacing_info->getId());
-            $cmd_spacing_action->setDisplay('forceReturnLineAfter', '1');
-            $cmd_spacing_action->save();
         }
+        $cmd_spacing_action->setName('Régler espacement tontes');
+        $cmd_spacing_action->setType('action');
+        $cmd_spacing_action->setSubType('slider');
+        $cmd_spacing_action->setGeneric_type('');
+        $cmd_spacing_action->setOrder(22);
+        $cmd_spacing_action->setConfiguration('minValue', 1);
+        $cmd_spacing_action->setConfiguration('maxValue', 28);
+        $cmd_spacing_action->setConfiguration('updateCmdId', $cmd_spacing_info->getId());
+        $cmd_spacing_action->setDisplay('forceReturnLineAfter', '1');
+        $cmd_spacing_action->save();
 
         // Seuil d'humidité : info numérique + action curseur (slider 0-100)
         $cmd_humidity_info = $eqLogic->getCmd(null, 'schedule_humidity_threshold');
         if (!is_object($cmd_humidity_info)) {
             $cmd_humidity_info = new LandroidRTKCmd();
             $cmd_humidity_info->setLogicalId('schedule_humidity_threshold');
-            $cmd_humidity_info->setName("Seuil d'humidité");
-            $cmd_humidity_info->setType('info');
-            $cmd_humidity_info->setSubType('numeric');
-            $cmd_humidity_info->setUnite('%');
-            $cmd_humidity_info->setGeneric_type('');
             $cmd_humidity_info->setEqLogic_id($eqLogic->getId());
-            $cmd_humidity_info->setOrder(23);
-            $cmd_humidity_info->setDisplay('forceReturnLineAfter', '1');
-            $cmd_humidity_info->save();
         }
+        $cmd_humidity_info->setName("Seuil d'humidité");
+        $cmd_humidity_info->setType('info');
+        $cmd_humidity_info->setSubType('numeric');
+        $cmd_humidity_info->setUnite('%');
+        $cmd_humidity_info->setGeneric_type('');
+        $cmd_humidity_info->setOrder(23);
+        $cmd_humidity_info->setDisplay('forceReturnLineAfter', '1');
+        $cmd_humidity_info->save();
+
         $cmd_humidity_action = $eqLogic->getCmd(null, 'schedule_humidity_threshold_set');
         if (!is_object($cmd_humidity_action)) {
             $cmd_humidity_action = new LandroidRTKCmd();
             $cmd_humidity_action->setLogicalId('schedule_humidity_threshold_set');
-            $cmd_humidity_action->setName("Régler seuil d'humidité");
-            $cmd_humidity_action->setType('action');
-            $cmd_humidity_action->setSubType('slider');
-            $cmd_humidity_action->setGeneric_type('');
             $cmd_humidity_action->setEqLogic_id($eqLogic->getId());
-            $cmd_humidity_action->setOrder(23);
-            $cmd_humidity_action->setConfiguration('minValue', 0);
-            $cmd_humidity_action->setConfiguration('maxValue', 100);
-            $cmd_humidity_action->setConfiguration('updateCmdId', $cmd_humidity_info->getId());
-            $cmd_humidity_action->setDisplay('forceReturnLineAfter', '1');
-            $cmd_humidity_action->save();
         }
+        $cmd_humidity_action->setName("Régler seuil d'humidité");
+        $cmd_humidity_action->setType('action');
+        $cmd_humidity_action->setSubType('slider');
+        $cmd_humidity_action->setGeneric_type('');
+        $cmd_humidity_action->setOrder(23);
+        $cmd_humidity_action->setConfiguration('minValue', 0);
+        $cmd_humidity_action->setConfiguration('maxValue', 100);
+        $cmd_humidity_action->setConfiguration('updateCmdId', $cmd_humidity_info->getId());
+        $cmd_humidity_action->setDisplay('forceReturnLineAfter', '1');
+        $cmd_humidity_action->save();
 
         // Nettoyage des commandes widget obsolètes : si une ancienne
         // version du plugin utilisait un logicalId différent pour une
