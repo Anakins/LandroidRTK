@@ -471,8 +471,7 @@ class LandroidRTKScheduler {
         // Température : entièrement optionnelle. Si le champ reste vide,
         // ce critère est simplement ignoré à l'évaluation. Doit
         // obligatoirement pointer vers une commande Jeedom (comme
-        // l'humidité) : pas de valeur fixe saisie à la main, sinon elle
-        // ne serait jamais mise à jour au fil du temps.
+        // l'humidité).
         if (!empty($config['temperature_cmd_id'])) {
             $cmd = self::resolveCmd($config['temperature_cmd_id']);
             if (!is_object($cmd)) {
@@ -1294,10 +1293,7 @@ class LandroidRTKScheduler {
 
     /**
      * Récupère la valeur de température actuelle depuis la commande
-     * Jeedom configurée (temperature_cmd_id). Aucune valeur fixe saisie
-     * à la main n'est acceptée : la température doit obligatoirement
-     * venir d'un équipement, sans quoi elle ne serait jamais mise à
-     * jour automatiquement.
+     * Jeedom configurée (temperature_cmd_id).
      */
     private static function getTemperatureValue($config) {
         if (empty($config['temperature_cmd_id'])) {
