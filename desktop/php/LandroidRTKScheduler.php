@@ -194,7 +194,7 @@ if (!isConnect()) {
 
         <fieldset>
             <legend><i class="fas fa-thermometer-half"></i> Température (optionnel)</legend>
-            <div class="help-block" style="margin:0 15px 10px;">Optionnel. Doit provenir d'un capteur externe (station météo) ou d'un plugin météo tiers — la valeur n'est jamais saisie à la main puisqu'elle changerait sans arrêt. Si vous sélectionnez une commande, le robot ne tondra pas si la température est en dehors de la plage seuil min/max. Si le champ reste vide, la température n'est pas prise en compte du tout.</div>
+            <div class="help-block" style="margin:0 15px 10px;">Optionnel. Doit provenir d'un capteur externe (station météo) ou d'un plugin météo tiers. Si le champ reste vide, la température n'est pas prise en compte du tout.</div>
             <div class="form-group">
                 <label class="col-sm-3 control-label">Commande de température</label>
                 <div class="col-sm-6">

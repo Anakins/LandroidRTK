@@ -101,7 +101,7 @@ Dès que la programmation est **activée**, un tableau apparaît tout en haut de
 2. **Espacement jours de tontes** : tondre tous les combien de jours (1 à 28)
 3. **Pluie** : le capteur natif du robot (case à cocher, pensez à régler le délai pluie à 0 dans l'appli Worx — le plugin vérifie ce réglage automatiquement et avertit si ce n'est pas le cas) et/ou un capteur externe optionnel (avec opérateur `==`/`≠`), et le **délai avant redémarrage après pluie** (20 à 120 min, par défaut 60 min — délai minimum nécessaire à l'absorption de la pluie par le sol, et/ou au rafraîchissement des plugins météo, certains toutes les 30 min) décrit au point précédent
 4. **Humidité** : une commande obligatoire renvoyant un nombre entre 0 et 100, un seuil max, et un délai minimum sous ce seuil
-5. **Température** *(optionnelle)* : juste un équipement Jeedom pointant vers un capteur de température (obligatoirement, puisqu'elle changerait sans arrêt), provenant d'un capteur externe ou d'un plugin météo, avec deux seuils :
+5. **Température** *(optionnelle)* : juste un équipement Jeedom pointant vers un capteur de température, provenant d'un capteur externe ou d'un plugin météo, avec deux seuils :
    - **Seuil minimum** (6 à 18°C, par défaut 10°C) : protection gel — le robot ne tond pas en dessous, pour ne pas abîmer une pelouse potentiellement gelée.
    - **Seuil maximum** (30 à 50°C, par défaut 40°C) : protection canicule — le robot ne tond pas au-dessus.
 
