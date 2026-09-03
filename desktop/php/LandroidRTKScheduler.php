@@ -18,11 +18,11 @@ if (!isConnect()) {
     <div id="schedule_conditions_status" style="display:none; margin:10px; border:1px solid #ddd; border-radius:4px; padding:10px; background:#fff;">
         <strong><i class="fas fa-list-check"></i> État des conditions de démarrage</strong>
         <a class="pull-right cursor" id="bt_refreshConditionsStatus" title="Rafraîchir"><i class="fas fa-sync"></i></a>
-        <table class="table table-condensed" style="margin-top:8px; margin-bottom:0;">
+        <table class="table table-condensed" style="margin-top:8px; margin-bottom:0; table-layout:fixed; width:100%;">
             <thead>
                 <tr>
-                    <th>Condition</th>
-                    <th style="width:550px;">État</th>
+                    <th style="width:50%;">Condition</th>
+                    <th style="width:50%;">État</th>
                 </tr>
             </thead>
             <tbody id="schedule_conditions_status_body"></tbody>
@@ -95,7 +95,7 @@ if (!isConnect()) {
                 <div class="col-sm-9">
                     <span class="help-block">Le robot ne démarrera plus une tonte si elle risque de se terminer après (heure de fin − cette marge). Ex : fin=20h, marge=180min → dernier départ possible 17h.
                     <br>💡 Astuce : en combinant l'heure de fin avec le <strong>coucher du soleil</strong> (fourni par un plugin météo externe) et une marge proche du <strong>temps de tonte habituel</strong> de votre pelouse, vous évitez que le robot termine (ou soit encore dehors) une fois la nuit tombée.
-                    <br>🌧️ Cette même durée sert aussi à détecter une pluie survenant <strong>pendant</strong> une tonte en cours : si c'est le cas, la tonte du jour est considérée comme non effectuée, et le robot ne pourra pas redémarrer avant le délai réglé ci-dessous (section Pluie) — même si l'humidité redescend entre temps — le temps que le sol absorbe la pluie.</span>
+                    <br>🌧️ Sert aussi à détecter une pluie pendant une tonte en cours : la tonte du jour est alors annulée, et le robot attend le délai réglé ci-dessous (section Pluie) avant de repartir.</span>
                 </div>
             </div>
         </fieldset>
@@ -150,12 +150,12 @@ if (!isConnect()) {
             <div class="form-group">
                 <label class="col-sm-3 control-label">Délai avant redémarrage après pluie</label>
                 <div class="col-sm-6" style="display:flex; align-items:center; gap:8px;">
-                    <input type="number" id="sched_rain_interrupt_minutes" class="form-control" min="40" max="120" style="width:80px;">
-                    <span>min (40 à 120, soit 40min à 2h)</span>
+                    <input type="number" id="sched_rain_interrupt_minutes" class="form-control" min="20" max="120" style="width:80px;">
+                    <span>min (20 à 120)</span>
                 </div>
                 <div class="col-sm-3"></div>
                 <div class="col-sm-9">
-                    <span class="help-block">Après une interruption pluie, le robot attend ce délai avant de retenter (le temps que le sol absorbe l'eau), même si l'humidité redescend entre-temps. Minimum 40 min : certains plugins météo ne rafraîchissent l'humidité que toutes les 30 min. Humidité re-testée normalement une fois le délai écoulé. Par défaut : 60 min (1h).</span>
+                    <span class="help-block">Délai minimum nécessaire à l'absorption de la pluie par le sol, et/ou au rafraîchissement des plugins météo (certains toutes les 30 min). Par défaut : 60 min.</span>
                 </div>
             </div>
         </fieldset>
@@ -202,7 +202,7 @@ if (!isConnect()) {
                         <input type="text" id="sched_temperature_cmd_id" class="form-control" placeholder="tag de commande">
                         <span class="input-group-btn"><a class="btn btn-success bt_openCmdPicker" data-target="#sched_temperature_cmd_id" data-cmdtype="info" data-cmdsubtype="numeric"><i class="fa fa-list-alt"></i></a></span>
                     </div>
-                    <span class="help-block">Capteur externe (station météo) ou plugin météo — ex: température extérieure. Doit obligatoirement pointer vers une commande Jeedom (pas de valeur fixe saisie à la main). Laisser vide pour ignorer ce critère.</span>
+                    <span class="help-block">Capteur externe (station météo) ou plugin météo — ex: température extérieure. Doit obligatoirement pointer vers une commande Jeedom. Laisser vide pour ignorer ce critère.</span>
                 </div>
                 <div class="col-sm-3" style="padding-top:7px;">
                     <span class="cmdValuePreview text-muted" data-input="#sched_temperature_cmd_id" data-min="-50" data-max="80"></span>
@@ -234,7 +234,7 @@ if (!isConnect()) {
 
         <fieldset>
             <legend><i class="fas fa-battery-half"></i> Batterie</legend>
-            <div class="help-block" style="margin:0 15px 10px;">La commande de batterie du robot ("Batterie", créée automatiquement par le plugin) est utilisée directement — rien à sélectionner ici. Seuil minimum requis pour démarrer le robot, ou le redémarrer après une pluie.</div>
+            <div class="help-block" style="margin:0 15px 10px;">Seuil minimum requis pour démarrer le robot, ou le redémarrer après une pluie.</div>
             <div class="form-group">
                 <label class="col-sm-3 control-label">Seuil minimum</label>
                 <div class="col-sm-6" style="display:flex; align-items:center; gap:8px;">
@@ -250,7 +250,7 @@ if (!isConnect()) {
                 Nécessite un plugin météo tiers fournissant un code numérique de type OpenWeatherMap/WeatherAPI — par exemple
                 <strong>"Weather Forecast, CAP alerts"</strong> (disponible sur le Market) ou le plugin météo officiel Jeedom.
                 Ces plugins peuvent aussi fournir l'humidité extérieure à utiliser ci-dessus.
-                <strong>Rappel : le robot ne tond automatiquement que par beau temps</strong>, c'est-à-dire les codes
+                <br><strong>Rappel : le robot ne tond automatiquement que par beau temps</strong>, c'est-à-dire les codes
                 <a href="https://openweathermap.org/api/weather-conditions" target="_blank">800 à 804 (OpenWeatherMap)</a> ou
                 <a href="https://www.weatherapi.com/docs/weather_conditions.json" target="_blank">1000 à 1009 (WeatherAPI)</a>
                 — cliquez sur ces liens pour voir la liste complète des codes de chaque service.

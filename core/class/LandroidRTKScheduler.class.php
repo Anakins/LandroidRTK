@@ -414,8 +414,8 @@ class LandroidRTKScheduler {
         if (!is_numeric($config['spacing_days']) || $config['spacing_days'] < 1 || $config['spacing_days'] > 28) {
             $errors[] = "L'espacement entre 2 tontes doit être compris entre 1 et 28 jours.";
         }
-        if (!is_numeric($config['rain_interrupt_minutes']) || $config['rain_interrupt_minutes'] < 40 || $config['rain_interrupt_minutes'] > 120) {
-            $errors[] = "Le délai d'attente après une interruption pluie doit être compris entre 40 et 120 minutes (2h).";
+        if (!is_numeric($config['rain_interrupt_minutes']) || $config['rain_interrupt_minutes'] < 20 || $config['rain_interrupt_minutes'] > 120) {
+            $errors[] = "Le délai d'attente après une interruption pluie doit être compris entre 20 et 120 minutes (2h).";
         }
 
         if (!empty($config['rain_own_enabled']) && $config['rain_own_enabled'] == '1') {
