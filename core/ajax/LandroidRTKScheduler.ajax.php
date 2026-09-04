@@ -135,6 +135,18 @@ try {
         ajax::success(array('last_mow_date' => $state['last_mow_date']));
     }
 
+    // [Débogage] Réinitialise l'anti-doublon quotidien des notifications
+    // "pas de tonte", pour pouvoir en retester l'envoi sans attendre le
+    // lendemain.
+    if (init('action') == 'resetNotifThrottle') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic)) {
+            throw new Exception('Équipement introuvable');
+        }
+        LandroidRTKScheduler::resetNotifThrottle($eqLogic);
+        ajax::success(true);
+    }
+
     if (init('action') == 'nextMowEstimate') {
         $eqLogic = eqLogic::byId(init('id'));
         if (!is_object($eqLogic)) {

@@ -39,6 +39,10 @@ if (!isConnect()) {
             <a class="btn btn-default btn-sm" id="bt_markMowToday"><i class="fas fa-check"></i> Marquer la tonte d'aujourd'hui comme faite</a>
             <span class="help-block" style="display:inline-block; margin:4px 0 0 0;">À utiliser si vous avez lancé une tonte manuellement (hors programmation) : évite que le robot ne reparte une seconde fois le même jour à cause d'une dernière tonte trop ancienne en mémoire.</span>
         </div>
+        <div style="margin-top:8px;">
+            <a class="btn btn-default btn-sm" id="bt_resetNotifThrottle"><i class="fas fa-bell-slash"></i> Réinitialiser l'anti-doublon des notifications "pas de tonte"</a>
+            <span class="help-block" style="display:inline-block; margin:4px 0 0 0;">Le plugin n'envoie cette notification qu'une fois par jour maximum, pour éviter le spam. Cliquez ici pour la débloquer et pouvoir retester immédiatement, sans attendre demain.</span>
+        </div>
     </div>
 
     <div id="schedule_errors" class="alert alert-danger" style="display:none; margin:10px;"></div>

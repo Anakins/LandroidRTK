@@ -640,3 +640,37 @@ $(document).on('click', '#bt_markMowToday', function (e) {
         }
     });
 });
+
+/* ------------------------------------------------------------------ */
+/* "Réinitialiser l'anti-doublon des notifications 'pas de tonte'"     */
+/* ------------------------------------------------------------------ */
+$(document).on('click', '#bt_resetNotifThrottle', function (e) {
+    e.preventDefault();
+    if (!confirm('{{Réinitialiser l\'anti-doublon des notifications "pas de tonte" ? La prochaine vérification (sous 5 min) pourra renvoyer une notification aujourd\'hui, même si une a déjà été envoyée.}}')) {
+        return;
+    }
+    var $bt = $(this);
+    $bt.find('i').removeClass('fa-bell-slash').addClass('fa-spinner fa-spin');
+    $.ajax({
+        type: 'POST',
+        url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
+        data: {
+            action: 'resetNotifThrottle',
+            id: LandroidRTKScheduler_currentEqLogicId,
+            apikey: LandroidRTKApikey,
+        },
+        dataType: 'json',
+        error: function (request, status, error) {
+            handleAjaxError(request, status, error);
+            $bt.find('i').removeClass('fa-spinner fa-spin').addClass('fa-bell-slash');
+        },
+        success: function (data) {
+            $bt.find('i').removeClass('fa-spinner fa-spin').addClass('fa-bell-slash');
+            if (data.state != 'ok') {
+                $.fn.showAlert({message: '{{Échec (voir logs LandroidRTK)}}', level: 'danger'});
+                return;
+            }
+            $.fn.showAlert({message: '{{Anti-doublon réinitialisé}}', level: 'success'});
+        }
+    });
+});
