@@ -148,6 +148,7 @@ function LandroidRTKScheduler_addNotificationRow(_notif) {
     $tr.find('.notif_cmd_id').val(_notif.cmd_id || '');
     $tr.find('.notif_title').val(_notif.title || '');
     $tr.find('.notif_html').prop('checked', _notif.html == '1');
+    $tr.find('.notif_no_mow').prop('checked', _notif.notify_no_mow != '0');
     $('#table_notifications tbody').append($tr);
     LandroidRTKScheduler_refreshPreview($tr.find('.notif_cmd_id'));
 }
@@ -399,6 +400,7 @@ function LandroidRTKScheduler_buildConfig() {
             cmd_id: $tr.find('.notif_cmd_id').val(),
             title: $tr.find('.notif_title').val(),
             html: $tr.find('.notif_html').is(':checked') ? '1' : '0',
+            notify_no_mow: $tr.find('.notif_no_mow').is(':checked') ? '1' : '0',
         });
     });
 
@@ -417,6 +419,7 @@ function LandroidRTKScheduler_buildConfig() {
         humidity_threshold: $('#sched_humidity_threshold').val(),
         humidity_duration_minutes: $('#sched_humidity_duration_minutes').val(),
         battery_min_percent: $('#sched_battery_min_percent').val(),
+        notify_no_mow_reason: $('#sched_notify_no_mow_reason').is(':checked') ? '1' : '0',
         temperature_cmd_id: $('#sched_temperature_cmd_id').val(),
         temperature_min: $('#sched_temperature_min').val(),
         temperature_max: $('#sched_temperature_max').val(),
