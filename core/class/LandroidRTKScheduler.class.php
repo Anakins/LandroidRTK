@@ -750,6 +750,18 @@ class LandroidRTKScheduler {
         return $state;
     }
 
+    // [Débogage] Réinitialise l'anti-doublon quotidien des notifications
+    // "pas de tonte" (une seule notification envoyée par jour et par
+    // raison, voir notifyNotReady()), pour permettre de retester leur
+    // envoi sans attendre le lendemain.
+    public static function resetNotifThrottle($eqLogic) {
+        $state = self::getState($eqLogic);
+        $state['last_notification_reason'] = null;
+        $state['last_notification_date'] = null;
+        self::saveState($eqLogic, $state);
+        log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): [débogage] anti-doublon des notifications "pas de tonte" réinitialisé.');
+    }
+
     /* ---------------------------------------------------------------- */
     /* Évaluation (appelée toutes les 5 min par le cron dédié)           */
     /* ---------------------------------------------------------------- */
