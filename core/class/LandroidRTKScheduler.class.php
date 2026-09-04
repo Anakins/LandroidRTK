@@ -651,12 +651,18 @@ class LandroidRTKScheduler {
     /* Notifications                                                    */
     /* ---------------------------------------------------------------- */
 
-    public static function sendNotifications($config, $title, $message_html, $message_plain) {
+    public static function sendNotifications($config, $title, $message_html, $message_plain, $type = 'default') {
         if (empty($config['notifications']) || !is_array($config['notifications'])) {
             return;
         }
         foreach ($config['notifications'] as $notif) {
             if (empty($notif['cmd_id'])) {
+                continue;
+            }
+            // Filtre par type : les notifications "pas de tonte" ne partent
+            // que vers les destinataires qui ont coché cette case (par
+            // défaut activée, pour ne rien changer aux habitudes actuelles).
+            if ($type == 'no_mow' && isset($notif['notify_no_mow']) && $notif['notify_no_mow'] == '0') {
                 continue;
             }
             $cmd = self::resolveCmd($notif['cmd_id']);
@@ -1204,6 +1210,22 @@ class LandroidRTKScheduler {
     }
 
     private static function notifyNotReady($eqLogic, $config, $state, $today, $reason) {
+        // On attend la fermeture de la fenêtre de tonte du jour avant de
+        // notifier (plutôt que dès la première vérification, potentiellement
+        // en pleine nuit) — sauf si la fenêtre n'est pas calculable, auquel
+        // cas on notifie normalement dès que le problème est détecté.
+        $start_resolved = self::resolveTimeField($config['time_start_cmd_id']);
+        $end_resolved = self::resolveTimeField($config['time_end_cmd_id']);
+        $start_min = ($start_resolved['mode'] == 'fixed') ? $start_resolved['minutes'] : self::parseHM(is_object($start_resolved['cmd']) ? $start_resolved['cmd']->execCmd() : null);
+        $end_min = ($end_resolved['mode'] == 'fixed') ? $end_resolved['minutes'] : self::parseHM(is_object($end_resolved['cmd']) ? $end_resolved['cmd']->execCmd() : null);
+        if ($start_min !== null && $end_min !== null) {
+            $latest_start = $end_min - intval($config['margin_minutes']);
+            $now_minutes = intval(date('H')) * 60 + intval(date('i'));
+            if ($now_minutes <= $latest_start) {
+                return; // fenêtre encore ouverte aujourd'hui, on attend sa fermeture
+            }
+        }
+
         if ($state['last_notification_reason'] == $reason && $state['last_notification_date'] == $today) {
             return; // déjà notifié aujourd'hui pour cette même raison
         }
@@ -1256,7 +1278,7 @@ class LandroidRTKScheduler {
         }
         $built = self::buildDualMessage($lines);
 
-        self::sendNotifications($config, strtoupper($eqLogic->getName()) . ' - PAS DE TONTE', $built['html'], $built['plain']);
+        self::sendNotifications($config, strtoupper($eqLogic->getName()) . ' - PAS DE TONTE', $built['html'], $built['plain'], 'no_mow');
 
         // Même contenu loggé en 'info' et en 'debug' (voir remarque
         // équivalente dans evaluate() pour le lancement de la tonte).
