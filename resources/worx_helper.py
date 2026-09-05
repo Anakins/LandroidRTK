@@ -182,6 +182,15 @@ def device_status(device):
     rain = raw_dat.get("rain") or {}
     rainsensor = getattr(device, "rainsensor", {}) or {}
 
+    party_mode = getattr(device, "partymode_enabled", None)
+    # Coupe intelligente des bordures (smart trim) : absente de pyworxcloud
+    # en tant qu'attribut dédié. CONFIRMÉ par test isolé (mode festif
+    # inchangé, seule la coupe intelligente basculée) : le champ "ob" dans
+    # la config de coupe de la zone RTK vaut 1 quand elle est activée, 0
+    # sinon.
+    smart_trim_raw = cut_cfg.get("ob")
+    smart_trim = (bool(smart_trim_raw) if smart_trim_raw is not None else None)
+
     return {
         "serial_number": getattr(device, "serial_number", None),
         "name": getattr(device, "name", None),
@@ -199,10 +208,19 @@ def device_status(device):
         "cut_angle": cut_cfg.get("d"),
         "rain_delay": rainsensor.get("delay"),
         "rain_detected": bool(rain.get("s")),
+        "party_mode_enabled": (bool(party_mode) if party_mode is not None else None),
+        "smart_trim_enabled": (bool(smart_trim) if smart_trim is not None else None),
         # DIAGNOSTIC TEMPORAIRE : à retirer une fois qu'on aura confirmé le
         # sens exact de ces champs (temps restant / surface tondue ?).
         "_debug_raw_cut": (raw_dat.get("cut") or {}),
         "_debug_area_mowed_total": getattr(device, "area_mowed", None),
+        # DIAGNOSTIC TEMPORAIRE (coupe intelligente des bordures / smart
+        # trim) : pyworxcloud 6.4.2 n'expose pas cette info sous forme
+        # d'attribut dédié. On dump les payloads bruts pour repérer le
+        # champ responsable en comparant un relevé avec l'option activée
+        # et un relevé avec l'option désactivée (voir README/discussion).
+        "_debug_raw_cfg": getattr(device, "raw_cfg", {}) or {},
+        "_debug_raw_dat": raw_dat,
     }
 
 
@@ -300,6 +318,10 @@ async def run():
                 await cloud.home(serial)
             elif action == "edge":
                 await cloud.ots(serial, boundary=True, runtime=20)
+            elif action == "party_on":
+                await cloud.set_party_mode(serial, True)
+            elif action == "party_off":
+                await cloud.set_party_mode(serial, False)
             else:
                 print(json.dumps({"error": f"action inconnue: {action}"}))
                 sys.exit(2)
