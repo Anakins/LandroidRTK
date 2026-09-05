@@ -24,7 +24,7 @@ Pilotage des tondeuses robot **Worx Landroid Vision Cloud** (2WD/4WD, avec RTK/G
 
 - Synchronisation automatique des tondeuses du compte Worx (numéro de série, modèle, image dédiée selon 2WD/4WD)
 - Suivi en temps réel via un démon connecté en permanence (MQTT) : batterie, statut, erreurs, position de coupe...
-- Commandes manuelles : Démarrer, Stop, Retour à la base, Tonte des bordures
+- Commandes manuelles : Démarrer, Stop, Retour à la base, Tonte des bordures, Mode festif (activer/désactiver, avec état affiché), et lecture de l'état de la coupe intelligente des bordures
 - Statuts et erreurs traduits en français
 - Alerte automatique en cas de perte de connexion prolongée (via le heartbeat natif Jeedom)
 - **Programmation automatique de tonte** basée sur météo/humidité/pluie — voir [section dédiée](#6-programmation-automatique-de-tonte)
@@ -62,10 +62,14 @@ Le code source est disponible sur [GitHub](https://github.com/Anakins/LandroidRT
 | Statut | Info | État courant (dans la station, tond la pelouse, en pause...) |
 | Erreur | Info | Dernière erreur signalée par la tondeuse |
 | Batterie | Info | Niveau de charge (%) |
-| Hauteur de coupe, Forme/Angle de tonte | Info | Paramètres de tonte (lecture seule) |
+| Hauteur de coupe | Info | Paramètre de tonte (lecture seule) |
+| Coupe intelligente des bordures | Info | Activée/Désactivée (lecture seule) |
+| Forme/Angle de tonte | Info | Paramètres de tonte (lecture seule) |
 | Délai pluie, Pluie détectée | Info | Capteur pluie natif du robot |
+| Mode festif | Info | Activé/Désactivé |
 | Dernière synchro | Info | Horodatage de la dernière mise à jour reçue |
 | Start / Stop / Maison / Bordures | Action | Pilotage manuel de la tondeuse |
+| Activer / Désactiver mode festif | Action | Suspend ou reprend la tonte programmée côté Worx |
 | Rafraichir | Action | Force une mise à jour immédiate du statut |
 
 ---
