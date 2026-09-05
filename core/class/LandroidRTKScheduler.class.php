@@ -1665,7 +1665,7 @@ class LandroidRTKScheduler {
         $cmd_enabled->setType('info');
         $cmd_enabled->setSubType('binary');
         $cmd_enabled->setGeneric_type('');
-        $cmd_enabled->setOrder(18);
+        $cmd_enabled->setOrder(30);
         $cmd_enabled->setDisplay('forceReturnLineAfter', '1');
         $cmd_enabled->save();
         self::applyWidgetScale($cmd_enabled);
@@ -1680,7 +1680,7 @@ class LandroidRTKScheduler {
         $cmd_activate->setType('action');
         $cmd_activate->setSubType('other');
         $cmd_activate->setGeneric_type('');
-        $cmd_activate->setOrder(18);
+        $cmd_activate->setOrder(30);
         $cmd_activate->save();
         self::applyWidgetScale($cmd_activate);
 
@@ -1694,7 +1694,7 @@ class LandroidRTKScheduler {
         $cmd_deactivate->setType('action');
         $cmd_deactivate->setSubType('other');
         $cmd_deactivate->setGeneric_type('');
-        $cmd_deactivate->setOrder(18);
+        $cmd_deactivate->setOrder(30);
         $cmd_deactivate->setDisplay('forceReturnLineAfter', '1');
         $cmd_deactivate->save();
         self::applyWidgetScale($cmd_deactivate);
@@ -1710,7 +1710,7 @@ class LandroidRTKScheduler {
         $cmd_last->setType('info');
         $cmd_last->setSubType('string');
         $cmd_last->setGeneric_type('');
-        $cmd_last->setOrder(19);
+        $cmd_last->setOrder(31);
         $cmd_last->setDisplay('forceReturnLineAfter', '1');
         $cmd_last->save();
         self::applyWidgetScale($cmd_last);
@@ -1727,7 +1727,7 @@ class LandroidRTKScheduler {
         $cmd_next->setType('info');
         $cmd_next->setSubType('string');
         $cmd_next->setGeneric_type('');
-        $cmd_next->setOrder(20);
+        $cmd_next->setOrder(32);
         $cmd_next->setDisplay('forceReturnLineAfter', '1');
         $cmd_next->save();
         self::applyWidgetScale($cmd_next);
@@ -1744,7 +1744,7 @@ class LandroidRTKScheduler {
         $cmd_margin_info->setSubType('numeric');
         $cmd_margin_info->setUnite('min');
         $cmd_margin_info->setGeneric_type('');
-        $cmd_margin_info->setOrder(21);
+        $cmd_margin_info->setOrder(33);
         $cmd_margin_info->setDisplay('forceReturnLineAfter', '1');
         $cmd_margin_info->save();
         self::applyWidgetScale($cmd_margin_info);
@@ -1759,10 +1759,11 @@ class LandroidRTKScheduler {
         $cmd_margin_action->setType('action');
         $cmd_margin_action->setSubType('slider');
         $cmd_margin_action->setGeneric_type('');
-        $cmd_margin_action->setOrder(21);
+        $cmd_margin_action->setOrder(33);
         $cmd_margin_action->setConfiguration('minValue', 0);
         $cmd_margin_action->setConfiguration('maxValue', 600);
         $cmd_margin_action->setConfiguration('updateCmdId', $cmd_margin_info->getId());
+        $cmd_margin_action->setValue($cmd_margin_info->getId());
         $cmd_margin_action->setDisplay('forceReturnLineAfter', '1');
         $cmd_margin_action->save();
         self::applyWidgetScale($cmd_margin_action);
@@ -1779,7 +1780,7 @@ class LandroidRTKScheduler {
         $cmd_spacing_info->setSubType('numeric');
         $cmd_spacing_info->setUnite('j');
         $cmd_spacing_info->setGeneric_type('');
-        $cmd_spacing_info->setOrder(22);
+        $cmd_spacing_info->setOrder(34);
         $cmd_spacing_info->setDisplay('forceReturnLineAfter', '1');
         $cmd_spacing_info->save();
         self::applyWidgetScale($cmd_spacing_info);
@@ -1794,10 +1795,11 @@ class LandroidRTKScheduler {
         $cmd_spacing_action->setType('action');
         $cmd_spacing_action->setSubType('slider');
         $cmd_spacing_action->setGeneric_type('');
-        $cmd_spacing_action->setOrder(22);
+        $cmd_spacing_action->setOrder(34);
         $cmd_spacing_action->setConfiguration('minValue', 1);
         $cmd_spacing_action->setConfiguration('maxValue', 28);
         $cmd_spacing_action->setConfiguration('updateCmdId', $cmd_spacing_info->getId());
+        $cmd_spacing_action->setValue($cmd_spacing_info->getId());
         $cmd_spacing_action->setDisplay('forceReturnLineAfter', '1');
         $cmd_spacing_action->save();
         self::applyWidgetScale($cmd_spacing_action);
@@ -1814,7 +1816,7 @@ class LandroidRTKScheduler {
         $cmd_humidity_info->setSubType('numeric');
         $cmd_humidity_info->setUnite('%');
         $cmd_humidity_info->setGeneric_type('');
-        $cmd_humidity_info->setOrder(23);
+        $cmd_humidity_info->setOrder(35);
         $cmd_humidity_info->setDisplay('forceReturnLineAfter', '1');
         $cmd_humidity_info->save();
         self::applyWidgetScale($cmd_humidity_info);
@@ -1829,10 +1831,11 @@ class LandroidRTKScheduler {
         $cmd_humidity_action->setType('action');
         $cmd_humidity_action->setSubType('slider');
         $cmd_humidity_action->setGeneric_type('');
-        $cmd_humidity_action->setOrder(23);
+        $cmd_humidity_action->setOrder(35);
         $cmd_humidity_action->setConfiguration('minValue', 0);
         $cmd_humidity_action->setConfiguration('maxValue', 100);
         $cmd_humidity_action->setConfiguration('updateCmdId', $cmd_humidity_info->getId());
+        $cmd_humidity_action->setValue($cmd_humidity_info->getId());
         $cmd_humidity_action->setDisplay('forceReturnLineAfter', '1');
         $cmd_humidity_action->save();
         self::applyWidgetScale($cmd_humidity_action);

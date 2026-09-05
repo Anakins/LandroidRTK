@@ -43,10 +43,12 @@ class LandroidRTK extends eqLogic {
         array('logicalId' => 'charging',      'name' => 'En charge',        'type' => 'string',  'unite' => '',  'order' => 6),
         array('logicalId' => 'locked',        'name' => 'Verrouillé',       'type' => 'string',  'unite' => '',  'order' => 7),
         array('logicalId' => 'height',        'name' => 'Hauteur de coupe', 'type' => 'numeric', 'unite' => 'mm', 'order' => 8),
-        array('logicalId' => 'pattern',       'name' => 'Forme tonte',      'type' => 'string',  'unite' => '',  'order' => 9),
-        array('logicalId' => 'angle',         'name' => 'Angle forme',      'type' => 'numeric', 'unite' => '°', 'order' => 10),
-        array('logicalId' => 'rain_delay',    'name' => 'Délai pluie',      'type' => 'numeric', 'unite' => 'h', 'order' => 11),
-        array('logicalId' => 'rain_detected', 'name' => 'Pluie détectée',   'type' => 'string',  'unite' => '',  'order' => 12),
+        array('logicalId' => 'smart_trim',    'name' => 'Coupe intelligente des bordures', 'type' => 'string', 'unite' => '', 'order' => 9),
+        array('logicalId' => 'pattern',       'name' => 'Forme tonte',      'type' => 'string',  'unite' => '',  'order' => 10),
+        array('logicalId' => 'angle',         'name' => 'Angle forme',      'type' => 'numeric', 'unite' => '°', 'order' => 11),
+        array('logicalId' => 'rain_delay',    'name' => 'Délai pluie',      'type' => 'numeric', 'unite' => 'h', 'order' => 12),
+        array('logicalId' => 'rain_detected', 'name' => 'Pluie détectée',   'type' => 'string',  'unite' => '',  'order' => 13),
+        array('logicalId' => 'party_mode',    'name' => 'Mode festif',      'type' => 'string',  'unite' => '',  'order' => 18),
     );
 
     /*
@@ -54,11 +56,13 @@ class LandroidRTK extends eqLogic {
      * attendu par worx_helper.py (mode "action").
      */
     public static $ACTION_COMMANDS = array(
-        array('logicalId' => 'start', 'name' => 'Start',      'action' => 'start',    'order' => 13, 'lineBreak' => '0'),
-        array('logicalId' => 'pause', 'name' => 'Stop',       'action' => 'pause',    'order' => 14, 'lineBreak' => '0'),
-        array('logicalId' => 'home',  'name' => 'Maison',     'action' => 'home',     'order' => 15, 'lineBreak' => '0'),
-        array('logicalId' => 'edge',  'name' => 'Bordures',   'action' => 'edge',     'order' => 16, 'lineBreak' => '1'),
-        array('logicalId' => 'sync',  'name' => 'Rafraichir', 'action' => '__sync__', 'order' => 17, 'lineBreak' => '1'),
+        array('logicalId' => 'start',      'name' => 'Start',                  'action' => 'start',     'order' => 14, 'lineBreak' => '0'),
+        array('logicalId' => 'pause',      'name' => 'Stop',                   'action' => 'pause',     'order' => 15, 'lineBreak' => '0'),
+        array('logicalId' => 'home',       'name' => 'Maison',                 'action' => 'home',      'order' => 16, 'lineBreak' => '0'),
+        array('logicalId' => 'edge',       'name' => 'Bordures',               'action' => 'edge',      'order' => 17, 'lineBreak' => '1'),
+        array('logicalId' => 'party_on',   'name' => 'Activer mode festif',    'action' => 'party_on',  'order' => 18, 'lineBreak' => '0'),
+        array('logicalId' => 'party_off',  'name' => 'Désactiver mode festif', 'action' => 'party_off', 'order' => 18, 'lineBreak' => '1'),
+        array('logicalId' => 'sync',       'name' => 'Rafraichir',             'action' => '__sync__',  'order' => 19, 'lineBreak' => '1'),
     );
 
     /* ---------------------------------------------------------------- */
@@ -388,6 +392,12 @@ class LandroidRTK extends eqLogic {
             $this->checkAndUpdateCmd('rain_delay', $data['rain_delay']);
         }
         $this->checkAndUpdateCmd('rain_detected', $data['rain_detected'] ? 'Oui' : 'Non');
+        if (isset($data['smart_trim_enabled']) && $data['smart_trim_enabled'] !== null) {
+            $this->checkAndUpdateCmd('smart_trim', $data['smart_trim_enabled'] ? 'Activée' : 'Désactivée');
+        }
+        if (isset($data['party_mode_enabled']) && $data['party_mode_enabled'] !== null) {
+            $this->checkAndUpdateCmd('party_mode', $data['party_mode_enabled'] ? 'Activé' : 'Désactivé');
+        }
 
         if (!empty($data['error_active'])) {
             log::add('LandroidRTK', 'error', $this->getHumanName() . ' signale une erreur : ' . $data['error_label']);
@@ -502,6 +512,12 @@ class LandroidRTK extends eqLogic {
         }
         if (isset($data['rain_detected'])) {
             $eqLogic->checkAndUpdateCmd('rain_detected', $data['rain_detected'] ? 'Oui' : 'Non');
+        }
+        if (isset($data['smart_trim_enabled']) && $data['smart_trim_enabled'] !== null) {
+            $eqLogic->checkAndUpdateCmd('smart_trim', $data['smart_trim_enabled'] ? 'Activée' : 'Désactivée');
+        }
+        if (isset($data['party_mode_enabled']) && $data['party_mode_enabled'] !== null) {
+            $eqLogic->checkAndUpdateCmd('party_mode', $data['party_mode_enabled'] ? 'Activé' : 'Désactivé');
         }
 
         if (!empty($data['error_message'])) {
