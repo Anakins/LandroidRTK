@@ -291,7 +291,7 @@ if (!isConnect()) {
             <legend><i class="fas fa-bell"></i> Notifications</legend>
             <table class="table table-condensed" id="table_notifications">
                 <thead>
-                    <tr><th style="width:30%;">Commande</th><th style="width:22%;">Titre</th><th style="width:13%;">HTML (&lt;br/&gt;)</th><th style="width:20%;">Reçoit "pas de tonte"</th><th></th></tr>
+                    <tr><th style="width:25%;">Commande</th><th style="width:18%;">Titre</th><th style="width:11%;">HTML (&lt;br/&gt;)</th><th style="width:18%;">Reçoit "pas de tonte"</th><th style="width:18%;">Reçoit "erreur robot"</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
             </table>
@@ -319,6 +319,7 @@ if (!isConnect()) {
         <td><input type="text" class="form-control notif_title" placeholder="(nom de la tondeuse) - TONTE"></td>
         <td style="text-align:center;"><input type="checkbox" class="notif_html"></td>
         <td style="text-align:center;"><input type="checkbox" class="notif_no_mow" checked></td>
+        <td style="text-align:center;"><input type="checkbox" class="notif_error"></td>
         <td>
             <a class="btn btn-default btn-xs bt_testNotifRow"><i class="fas fa-paper-plane"></i></a>
             <a class="btn btn-danger btn-xs bt_removeRow"><i class="fas fa-trash"></i></a>

@@ -372,7 +372,7 @@ class LandroidRTK extends eqLogic {
         $this->checkAndUpdateCmd('online', $data['online'] ? 'Oui' : 'Non');
         $this->checkAndUpdateCmd('status', $data['status_label']);
         $this->checkAndUpdateCmd('error', $data['error_label']);
-        $this->checkAndUpdateCmd('battery', $data['battery_percent']);
+        LandroidRTKScheduler::checkErrorNotification($this, !empty($data['error_active']), $data['error_label']);        $this->checkAndUpdateCmd('battery', $data['battery_percent']);
         $this->checkAndUpdateCmd('charging', $data['charging'] ? 'Oui' : 'Non');
         $this->checkAndUpdateCmd('locked', $data['locked'] ? 'Oui' : 'Non');
         if (isset($data['cutting_height'])) {

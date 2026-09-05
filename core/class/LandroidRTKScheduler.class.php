@@ -665,6 +665,13 @@ class LandroidRTKScheduler {
             if ($type == 'no_mow' && isset($notif['notify_no_mow']) && $notif['notify_no_mow'] == '0') {
                 continue;
             }
+            // Filtre par type : les notifications d'erreur robot ne partent
+            // que vers les destinataires qui ont coché cette case (par
+            // défaut désactivée : c'est une nouvelle option, on ne change
+            // pas les habitudes existantes sans action explicite).
+            if ($type == 'error' && (!isset($notif['notify_error']) || $notif['notify_error'] != '1')) {
+                continue;
+            }
             $cmd = self::resolveCmd($notif['cmd_id']);
             if (!is_object($cmd)) {
                 continue;
@@ -678,6 +685,58 @@ class LandroidRTKScheduler {
                 log::add('LandroidRTK', 'error', 'Scheduler: échec envoi notification cmd ' . $notif['cmd_id'] . ' : ' . $e->getMessage());
             }
         }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Notification d'erreur robot persistante                           */
+    /* ---------------------------------------------------------------- */
+
+    // Appelée à chaque refreshStatus() (toutes les 5 min) avec le libellé
+    // d'erreur actuellement remonté par le robot ('' si aucune erreur).
+    // N'envoie une notification que si la MÊME erreur persiste depuis au
+    // moins 3 minutes (évite de notifier pour un blocage que le robot
+    // résout tout seul en quelques secondes), et une seule fois par
+    // occurrence (si l'erreur change ou disparaît puis revient, on
+    // recompte 3 minutes avant de renotifier).
+    public static function checkErrorNotification($eqLogic, $error_active, $error_label) {
+        $config = self::getConfig($eqLogic);
+        $state = self::getState($eqLogic);
+        $error_label = trim((string) $error_label);
+
+        if (!$error_active || $error_label === '') {
+            // Plus d'erreur : on repart de zéro pour la prochaine.
+            if ($state['error_pending_label'] !== null || $state['error_notified_label'] !== null) {
+                $state['error_pending_label'] = null;
+                $state['error_pending_since'] = null;
+                $state['error_notified_label'] = null;
+                self::saveState($eqLogic, $state);
+            }
+            return;
+        }
+
+        if ($state['error_pending_label'] !== $error_label) {
+            // Nouvelle erreur (ou changement de libellé) : on démarre le
+            // décompte de 3 minutes, sans notifier tout de suite.
+            $state['error_pending_label'] = $error_label;
+            $state['error_pending_since'] = time();
+            self::saveState($eqLogic, $state);
+            return;
+        }
+
+        if ($state['error_notified_label'] === $error_label) {
+            return; // déjà notifié pour cette occurrence précise
+        }
+
+        if ($state['error_pending_since'] === null || (time() - intval($state['error_pending_since'])) < 180) {
+            return; // pas encore 3 minutes que cette erreur persiste
+        }
+
+        $title = strtoupper($eqLogic->getName()) . ' - ERREUR';
+        $text = "⚠️ {$eqLogic->getName()} est en erreur : {$error_label}";
+        self::sendNotifications($config, $title, $text, $text, 'error');
+
+        $state['error_notified_label'] = $error_label;
+        self::saveState($eqLogic, $state);
     }
 
     /* ---------------------------------------------------------------- */
@@ -700,6 +759,12 @@ class LandroidRTKScheduler {
             // avant lequel on ignore le critère d'humidité même s'il
             // redevient favorable (le temps que le sol absorbe la pluie).
             'rain_interrupt_until' => null,
+            // Suivi de l'erreur robot en cours (voir checkErrorNotification) :
+            // libellé actuellement observé, depuis quand, et le dernier
+            // libellé pour lequel une notification a déjà été envoyée.
+            'error_pending_label' => null,
+            'error_pending_since' => null,
+            'error_notified_label' => null,
         );
         if ($raw == '') {
             return $default;

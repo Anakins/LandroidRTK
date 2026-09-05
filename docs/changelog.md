@@ -7,6 +7,7 @@
 - Interruption automatique en cas de pluie pendant une tonte en cours, avec délai d'attente réglable (20 à 120 min) avant nouvelle tentative.
 - Vérification systématique de la batterie avant tout démarrage (y compris après une reprise post-pluie) : évite d'envoyer un ordre de démarrage que Worx refuserait silencieusement faute de batterie suffisante.
 - Notification "pas de tonte" (avec la raison) envoyée à la fermeture de la fenêtre de tonte du jour plutôt qu'en pleine nuit, avec une case "Reçoit 'pas de tonte'" par destinataire pour choisir qui la reçoit.
+- Notification d'erreur robot (case "Reçoit 'erreur robot'" par destinataire) : envoyée si une même erreur persiste plus de 3 minutes, avec le libellé de l'erreur.
 - Détection automatique des équipements manquants (ex: plugin météo tiers désinstallé) : la programmation ne tente jamais de démarrer dans ce cas, avec avertissement dans le Centre de Messages Jeedom et directement dans l'onglet Programmation.
 - Widget dashboard dédié : boutons Activer/Désactiver, curseurs réglables (marge, espacement, seuil d'humidité), estimation de la prochaine tonte.
 - Boutons de débogage (forcer la dernière tonte à hier, marquer la tonte du jour comme faite, réinitialiser l'anti-doublon des notifications "pas de tonte") pour faciliter les tests.
