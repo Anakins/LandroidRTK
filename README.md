@@ -171,6 +171,7 @@ Dans ce cas :
 ## 7. Limitations connues
 
 - La forme/l'angle de tonte sont **en lecture seule** : l'API Worx cloud ne permet pas (à ce jour, via `pyworxcloud`) de les modifier à distance.
+- La coupe intelligente des bordures (smart trim) est aussi **en lecture seule** : contrairement au mode festif, `pyworxcloud` n'expose aucune méthode pour l'activer/désactiver à distance (seul son état est lisible).
 - Worx applique une limite de requêtes sur son API cloud. Évitez de redémarrer le démon de façon répétée et rapprochée, au risque d'un blocage temporaire de votre compte (visible aussi dans l'application Worx officielle le temps que ça se lève).
 
 ## 8. Mise à jour du plugin
