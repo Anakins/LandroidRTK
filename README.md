@@ -71,7 +71,7 @@ Le code source est disponible sur [GitHub](https://github.com/Anakins/LandroidRT
 | Mode festif | Info | Activé/Désactivé |
 | Dernière synchro | Info | Horodatage de la dernière mise à jour reçue |
 | Start / Stop / Maison / Bordures | Action | Pilotage manuel de la tondeuse |
-| Activer / Désactiver mode festif | Action | Suspend ou reprend la tonte programmée côté Worx |
+| Activer / Désactiver mode festif | Action | Empêche le robot de démarrer tout seul (reste à la base) — utile quand du monde ou des objets se trouvent sur la pelouse (fête, jeux d'enfants...) |
 | Rafraichir | Action | Force une mise à jour immédiate du statut |
 
 ---
@@ -118,7 +118,7 @@ Dès que la programmation est **activée**, un tableau apparaît tout en haut de
 8. **Notifications** : autant de commandes que voulu (Discord, appli mobile...), avec titre personnalisable et choix du format (HTML avec `<br/>`, ou texte brut pour Discord). Une case "Reçoit *pas de tonte*" par ligne permet de choisir, pour chaque destinataire, s'il reçoit aussi la notification "le robot ne va pas tondre aujourd'hui" (envoyée une seule fois, à la fermeture de la fenêtre de tonte du jour, avec la raison) — utile par exemple pour la réserver à Discord et ne pas encombrer l'appli mobile, ou l'inverse. Une case "Reçoit *erreur robot*" (désactivée par défaut) permet en plus de choisir qui reçoit une notification quand le robot signale une erreur (blocage, etc.) — envoyée uniquement si l'erreur persiste plus de 3 minutes, pour ignorer les blocages que le robot résout tout seul en quelques secondes.
    > 📋 Le contenu de chaque notification (lancement de tonte, tonte annulée...) suit toujours le même ordre : météo (condition) → température (si réglée) → humidité → batterie. Le même détail est aussi écrit dans les logs du plugin (niveaux `info` et `debug`), pour le retrouver facilement en cas de dépannage.
 
-Pour chaque champ "commande", cliquez sur l'icône ⬜ à côté du champ pour ouvrir le **sélecteur natif Jeedom** (le même que dans les scénarios). Un aperçu de la valeur actuelle s'affiche automatiquement à côté (en vert si valide, en rouge sinon) ; pour le code météo, le libellé anglais correspondant s'affiche aussi.
+Pour chaque champ "commande", cliquez sur l'icône verte à côté du champ pour ouvrir le **sélecteur natif Jeedom** (le même que dans les scénarios). Un aperçu de la valeur actuelle s'affiche automatiquement à côté (en vert si valide, en rouge sinon) ; pour le code météo, le libellé anglais correspondant s'affiche aussi.
 
 ### Plugin météo recommandé
 
