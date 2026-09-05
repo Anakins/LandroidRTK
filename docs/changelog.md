@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 (beta)
+## 1.1.0 (2026-09-05)
 - **Programmation automatique de tonte** (nouvel onglet dédié) : plage horaire, espacement entre tontes, sécurité pluie (capteur natif du robot et/ou capteur externe), seuil et délai d'humidité, plage de température min/max (protection gel et canicule), seuil de batterie minimum, condition météo (via un plugin météo tiers), notifications personnalisables (Discord, appli mobile...).
 - Tableau "État des conditions de démarrage" en haut de l'onglet Programmation (quand elle est active) : détail condition par condition (OK/Non) pour comprendre en un coup d'œil ce qui bloque un démarrage.
 - Aperçu en direct de l'heure limite de démarrage ("Dernier départ : HH:MM") à côté du réglage de marge, recalculé à chaque modification.
