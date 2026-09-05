@@ -62,6 +62,8 @@ Le code source est disponible sur [GitHub](https://github.com/Anakins/LandroidRT
 | Statut | Info | État courant (dans la station, tond la pelouse, en pause...) |
 | Erreur | Info | Dernière erreur signalée par la tondeuse |
 | Batterie | Info | Niveau de charge (%) |
+| En charge | Info | La tondeuse est-elle en train de charger |
+| Verrouillé | Info | État du verrouillage PIN de la tondeuse |
 | Hauteur de coupe | Info | Paramètre de tonte (lecture seule) |
 | Coupe intelligente des bordures | Info | Activée/Désactivée (lecture seule) |
 | Forme/Angle de tonte | Info | Paramètres de tonte (lecture seule) |
@@ -99,7 +101,7 @@ Dès que la programmation est **activée**, un tableau apparaît tout en haut de
 
 ### Étapes de configuration
 
-1. **Plage horaire** : heure de début/fin (soit un tag de commande Jeedom du style `#[Objet][Équipement][Commande]#`, soit une heure fixe au format `HMM`/`HHMM`, ex: `800` = 08h00), et une marge de sécurité en minutes avant l'heure de fin
+1. **Plage horaire** : heure de début/fin (soit un tag de commande Jeedom du style `#[Objet][Équipement][Commande]#`, soit une heure fixe au format `HMM`/`HHMM`, ex: `800` = 08h00), et une marge de sécurité en minutes avant l'heure de fin (un aperçu en direct **"Dernier départ : HH:MM"** s'affiche à côté du champ, recalculé à chaque modification)
    > 💡 **Astuce** : utilisez le **coucher du soleil** (fourni par un plugin météo externe) comme heure de fin, et réglez la marge sur le **temps que met habituellement votre robot à tondre toute la pelouse**. Le robot ne démarrera alors jamais une tonte qui risquerait de se terminer une fois la nuit tombée.
    > 🌧️🏠 Cette même marge sert aussi de "durée de tonte estimée" pour détecter une pluie arrivant **pendant** une tonte en cours : dans ce cas, une notification "🌧️🏠 Il pleut, {robot} rentre à sa base" est envoyée, la tonte du jour est considérée comme non effectuée, et le robot ne pourra pas redémarrer avant le **délai réglable** décrit ci-dessous (par défaut 1h) — même si l'humidité redescend entre temps, le temps que le sol absorbe une grosse pluie. Pendant ce délai, l'humidité continue d'être surveillée normalement : si elle remonte au-dessus du seuil, le cycle d'attente habituel reprend automatiquement, avec une notification de reprise précisant explicitement qu'il s'agit d'une reprise après un arrêt pluie. Un court rappel "(tonte interrompue par la pluie)" apparaît alors à côté de la prochaine estimation de tonte.
 2. **Espacement jours de tontes** : tondre tous les combien de jours (1 à 28)
@@ -134,14 +136,15 @@ Chaque ligne de notification a aussi son propre bouton de test individuel (envoi
 
 Une fois la programmation active et valide, un encart en haut de l'onglet indique une estimation de la prochaine tonte (en supposant l'humidité actuelle inchangée) — pratique pour ajuster les réglages sans attendre. Un résumé court de cette même estimation est aussi disponible dans le widget du dashboard.
 
-### Outils sur la "dernière tonte"
+### Outils de débogage
 
-Deux boutons dédiés, sous l'encart d'estimation, agissent sur la date de dernière tonte enregistrée par le planificateur :
+Sous l'encart d'estimation, trois boutons dédiés facilitent les tests sans attendre les délais réels :
 
-- **[Débogage] Régler la dernière tonte à hier** : force la date à la veille, pour pouvoir tester le déclenchement le jour même sans attendre l'espacement complet configuré. À utiliser uniquement pour vérifier que le robot démarre bien selon les seuils paramétrés (humidité, météo, température...).
+- **[Débogage] Régler la dernière tonte à hier** : force la date de dernière tonte à la veille, pour pouvoir tester le déclenchement le jour même sans attendre l'espacement complet configuré. À utiliser uniquement pour vérifier que le robot démarre bien selon les seuils paramétrés (humidité, météo, température...).
 - **Marquer la tonte d'aujourd'hui comme faite** : à utiliser après une tonte lancée **manuellement** (hors programmation). Si la dernière tonte enregistrée remonte à plus longtemps que l'espacement configuré, le planificateur redéclencherait sinon une seconde tonte le même jour dès que les autres conditions sont réunies.
+- **Réinitialiser l'anti-doublon des notifications "pas de tonte"** : la notification "pas de tonte" (voir section Notifications) n'est envoyée qu'une fois par jour maximum, pour éviter le spam. Ce bouton débloque cette limite pour pouvoir retester son envoi immédiatement, sans attendre le lendemain.
 
-Les deux boutons réinitialisent aussi l'éventuel état "tonte en cours"/"délai post-pluie" (sans jamais toucher au suivi d'humidité, qui reflète l'état réel du capteur).
+Les deux premiers boutons réinitialisent aussi l'éventuel état "tonte en cours"/"délai post-pluie" (sans jamais toucher au suivi d'humidité, qui reflète l'état réel du capteur).
 
 ### Widget dashboard
 
