@@ -98,8 +98,18 @@ if (!isConnect()) {
                 </div>
                 <div class="col-sm-9">
                     <span class="help-block">Le robot ne démarrera plus une tonte si elle risque de se terminer après (heure de fin − cette marge). Ex : fin=20h, marge=180min → dernier départ possible 17h.
-                    <br>💡 Astuce : en combinant l'heure de fin avec le <strong>coucher du soleil</strong> (fourni par un plugin météo externe) et une marge proche du <strong>temps de tonte habituel</strong> de votre pelouse, vous évitez que le robot termine (ou soit encore dehors) une fois la nuit tombée.
-                    <br>🌧️ Sert aussi à détecter une pluie pendant une tonte en cours : la tonte du jour est alors annulée, et le robot attend le délai réglé ci-dessous (section Pluie) avant de repartir.</span>
+                    <br>💡 Astuce : en combinant l'heure de fin avec le <strong>coucher du soleil</strong> (fourni par un plugin météo externe) et une marge proche du <strong>temps de tonte habituel</strong> de votre pelouse, vous évitez que le robot termine (ou soit encore dehors) une fois la nuit tombée.</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">Durée de tonte estimée</label>
+                <div class="col-sm-6" style="display:flex; align-items:center; gap:8px;">
+                    <input type="number" id="sched_mow_duration_minutes" class="form-control" min="30" max="360" style="width:80px;">
+                    <span>min (30 à 360, soit 6h max)</span>
+                </div>
+                <div class="col-sm-3"></div>
+                <div class="col-sm-9">
+                    <span class="help-block">🌧️ Sert à détecter une vraie pluie pendant une tonte en cours (la tonte du jour est alors annulée, et le robot attend le délai réglé ci-dessous en section Pluie avant de repartir) tout en ignorant les fausses alertes qui arriveraient bien plus tard le même jour, une fois la tonte déjà terminée depuis longtemps. Distincte de la marge ci-dessus. Par défaut : 120 min.</span>
                 </div>
             </div>
         </fieldset>
@@ -289,6 +299,10 @@ if (!isConnect()) {
 
         <fieldset>
             <legend><i class="fas fa-bell"></i> Notifications</legend>
+            <ul style="margin:0 0 10px 15px; padding:0; font-size:0.9em; color:#666;">
+                <li><b>Reçoit "pas de tonte"</b> : envoyée en fin de journée si la tonte n'a pas pu avoir lieu.</li>
+                <li><b>Reçoit "erreur robot"</b> : envoyée si le robot signale une erreur.</li>
+            </ul>
             <table class="table table-condensed" id="table_notifications">
                 <thead>
                     <tr><th style="width:25%;">Commande</th><th style="width:18%;">Titre</th><th style="width:11%;">HTML (&lt;br/&gt;)</th><th style="width:18%;">Reçoit "pas de tonte"</th><th style="width:18%;">Reçoit "erreur robot"</th><th></th></tr>
