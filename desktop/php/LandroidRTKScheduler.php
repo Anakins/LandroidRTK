@@ -264,7 +264,7 @@ if (!isConnect()) {
                 <div class="col-sm-6">
                     <div class="input-group">
                         <input type="text" id="sched_condition_id_cmd_id" class="form-control">
-                        <span class="input-group-btn"><a class="btn btn-success bt_openCmdPicker" data-target="#sched_condition_id_cmd_id" data-cmdtype="info" data-cmdsubtype="numeric"><i class="fa fa-list-alt"></i></a></span>
+                        <span class="input-group-btn"><a class="btn btn-success bt_openCmdPicker" data-target="#sched_condition_id_cmd_id" data-cmdtype="info"><i class="fa fa-list-alt"></i></a></span>
                     </div>
                     <span class="help-block">Code numérique OpenWeatherMap/WeatherAPI (ex: 800 = ciel dégagé). Fourni par le plugin météo officiel Jeedom ou tout équivalent.</span>
                 </div>
