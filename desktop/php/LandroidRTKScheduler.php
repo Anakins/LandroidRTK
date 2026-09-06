@@ -216,11 +216,11 @@ if (!isConnect()) {
                 <label class="col-sm-3 control-label">Seuil minimum</label>
                 <div class="col-sm-6" style="display:flex; align-items:center; gap:8px;">
                     <input type="number" id="sched_temperature_min" class="form-control" min="4" max="18" style="width:80px;">
-                    <span>°C (6 à 18)</span>
+                    <span>°C (4 à 18)</span>
                 </div>
                 <div class="col-sm-3"></div>
                 <div class="col-sm-9">
-                    <span class="help-block">Protection gel : le robot ne tond pas en dessous de ce seuil, pour ne pas abîmer une pelouse potentiellement gelée. Par défaut : 10°C.</span>
+                    <span class="help-block">Protection gel : le robot ne tond pas en dessous de ce seuil, pour ne pas abîmer une pelouse potentiellement gelée. Par défaut : 8°C.</span>
                 </div>
             </div>
             <div class="form-group">
