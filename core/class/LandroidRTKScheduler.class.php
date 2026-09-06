@@ -344,6 +344,24 @@ class LandroidRTKScheduler {
     }
 
     public static function saveConfig($eqLogic, $config) {
+        // Si le seuil d'humidité est ABAISSÉ (plus strict), on réinitialise
+        // le suivi du délai (humidity_low_since) : le temps déjà écoulé a
+        // été mesuré par rapport à l'ancien seuil, plus permissif, donc il
+        // ne doit pas compter pour le nouveau. Si le seuil est RELEVÉ (plus
+        // permissif), on ne touche à rien : le temps déjà passé sous un
+        // seuil plus strict reste valable pour un seuil plus large.
+        $old_config = self::getConfig($eqLogic);
+        if (isset($old_config['humidity_threshold']) && isset($config['humidity_threshold'])
+            && is_numeric($old_config['humidity_threshold']) && is_numeric($config['humidity_threshold'])
+            && floatval($config['humidity_threshold']) < floatval($old_config['humidity_threshold'])) {
+            $state = self::getState($eqLogic);
+            if ($state['humidity_low_since'] !== null) {
+                $state['humidity_low_since'] = null;
+                self::saveState($eqLogic, $state);
+                log::add('LandroidRTK', 'info', $eqLogic->getHumanName() . " : seuil d'humidité abaissé, délai de confirmation réinitialisé.");
+            }
+        }
+
         $eqLogic->setConfiguration('mowing_schedule', json_encode($config));
         $eqLogic->save();
     }
@@ -1081,6 +1099,26 @@ class LandroidRTKScheduler {
             self::saveState($eqLogic, $state);
         }
 
+        // --- Suivi du délai d'humidité (humidity_low_since) ---
+        // IMPORTANT : ce suivi doit tourner à CHAQUE cycle, quel que soit
+        // l'espacement ou la plage horaire du jour — sinon, si l'humidité
+        // repasse au-dessus du seuil un jour où on ne regarde pas (hors
+        // plage horaire, ou avant que l'espacement ne soit atteint), le
+        // compteur ne serait jamais remis à zéro et resterait "périmé",
+        // ce qui ferait croire à tort que le délai est déjà écoulé dès que
+        // l'humidité repasse sous le seuil bien plus tard.
+        $humidity_val_tracking = self::getCmdValue($config['humidity_cmd_id']);
+        $threshold_tracking = floatval($config['humidity_threshold']);
+        if (!is_numeric($humidity_val_tracking) || floatval($humidity_val_tracking) > $threshold_tracking) {
+            if ($state['humidity_low_since'] !== null) {
+                $state['humidity_low_since'] = null;
+                self::saveState($eqLogic, $state);
+            }
+        } elseif ($state['humidity_low_since'] === null) {
+            $state['humidity_low_since'] = $now;
+            self::saveState($eqLogic, $state);
+        }
+
         // --- Espacement entre 2 tontes ---
         if ($state['last_mow_date'] == $today) {
             return; // déjà tondu aujourd'hui, rien à faire de plus
@@ -1107,22 +1145,15 @@ class LandroidRTKScheduler {
         }
 
         // --- Humidité (doit être sous le seuil depuis assez longtemps) ---
+        // Le suivi (set/reset de humidity_low_since) est déjà fait plus
+        // haut, à chaque cycle. Ici on ne fait que lire l'état pour décider.
         $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
         $threshold = floatval($config['humidity_threshold']);
         $duration_needed = intval($config['humidity_duration_minutes']) * 60;
 
         if (!is_numeric($humidity_val) || floatval($humidity_val) > $threshold) {
-            // Humidité trop haute : on réinitialise le suivi
-            if ($state['humidity_low_since'] !== null) {
-                $state['humidity_low_since'] = null;
-                self::saveState($eqLogic, $state);
-            }
             self::notifyNotReady($eqLogic, $config, $state, $today, 'humidity');
             return;
-        }
-        if ($state['humidity_low_since'] === null) {
-            $state['humidity_low_since'] = $now;
-            self::saveState($eqLogic, $state);
         }
         $humidity_ok_since = $now - $state['humidity_low_since'];
         if ($humidity_ok_since < $duration_needed) {
@@ -1208,7 +1239,8 @@ class LandroidRTKScheduler {
                 $msg_parts[] = "🌡️ La température est de {$temp_val}°C.";
             }
         }
-        $msg_parts[] = "💧 L'humidité est de {$humidity_val}%.";
+        $humidity_since_min = !empty($state['humidity_low_since']) ? round((time() - $state['humidity_low_since']) / 60) : null;
+        $msg_parts[] = "💧 L'humidité est de {$humidity_val}%" . ($humidity_since_min !== null ? " (depuis {$humidity_since_min} min)" : '') . ".";
         $msg_parts[] = "🔋 Batterie : {$battery_val}%.";
         $msg = self::buildDualMessage($msg_parts);
         $msg_html = $msg['html'];

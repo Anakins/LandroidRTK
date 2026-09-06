@@ -13,6 +13,10 @@
 - Détection automatique des équipements manquants (ex: plugin météo tiers désinstallé) : la programmation ne tente jamais de démarrer dans ce cas, avec avertissement dans le Centre de Messages Jeedom et directement dans l'onglet Programmation.
 - Widget dashboard dédié : boutons Activer/Désactiver, curseurs réglables (marge, espacement, seuil d'humidité), estimation de la prochaine tonte.
 - Boutons de débogage (forcer la dernière tonte à hier, marquer la tonte du jour comme faite, réinitialiser l'anti-doublon des notifications "pas de tonte") pour faciliter les tests.
+- Correction : le sélecteur de la commande "code météo" était restreint aux commandes de sous-type "numérique", cachant les commandes texte contenant un nombre (cas fréquent selon les plugins météo).
+- **Bug corrigé** : le suivi du délai d'humidité (compteur avant de considérer la pelouse assez sèche) était remis à zéro uniquement pendant la plage horaire de tonte. Si l'humidité remontait au-dessus du seuil en dehors de cette fenêtre (la nuit par exemple), le compteur n'était jamais réinitialisé et pouvait rester périmé, faisant croire à tort que le délai était déjà écoulé. Le suivi tourne désormais à chaque cycle, quelle que soit l'heure.
+- Le compteur de délai d'humidité est réinitialisé automatiquement si le seuil est abaissé (plus strict) ; il est conservé si le seuil est relevé (plus permissif).
+- La notification de démarrage de tonte affiche désormais depuis combien de temps l'humidité est passée sous le seuil (ex: "65% (depuis 42 min)").
 
 ## 1.0.0
 - Version initiale : synchronisation des tondeuses Worx Vision, commandes info/action, cron de rafraîchissement automatique.
