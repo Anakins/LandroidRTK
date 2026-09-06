@@ -957,7 +957,9 @@ class LandroidRTKScheduler {
         $humidity_ok = $humidity_below && $humidity_wait_ok;
         $humidity_detail = is_numeric($humidity_val) ? ($humidity_val . '% (seuil ' . $threshold . '%)') : 'Valeur indisponible';
         if ($humidity_below && !$humidity_wait_ok) {
-            $humidity_detail .= ' — sous le seuil, en attente du délai de confirmation';
+            $elapsed = !empty($state['humidity_low_since']) ? ($now - $state['humidity_low_since']) : 0;
+            $remaining_min = max(0, ceil(($duration_needed - $elapsed) / 60));
+            $humidity_detail .= " — doit encore rester {$remaining_min} min sous ce seuil";
         }
         $rows[] = array('label' => 'Humidité sous le seuil (délai inclus)', 'ok' => $humidity_ok, 'detail' => $humidity_detail);
 
