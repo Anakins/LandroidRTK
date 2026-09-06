@@ -236,7 +236,11 @@ class LandroidRTKScheduler {
     }
 
     // Emojis standards (indépendants de tout plugin météo), sélectionnés
-    // à partir des familles de codes OpenWeatherMap.
+    // à partir des familles de codes OpenWeatherMap ET WeatherAPI.com (les
+    // deux sources supportées par le plugin météo générique). Un seul
+    // emoji par grande famille (orage, bruine, pluie, neige/grésil) —
+    // brume/poussière et tornade/vent violent ne sont volontairement pas
+    // catégorisées (retombent sur l'inconnu).
     public static function getEmoji($condition_id) {
         if ($condition_id === null || $condition_id === '') {
             return '❔';
@@ -256,13 +260,31 @@ class LandroidRTKScheduler {
         if ($id == 1003) return '🌤️';
         if ($id == 1006) return '⛅';
         if ($id == 1009) return '☁️';
-        // Autres codes (pluie, neige, etc.) — hors condition de tonte,
-        // mais utile si affiché ailleurs (ex: message pluie).
+
+        // --- Orage (thunderstorm) ---
         if ($id >= 200 && $id < 300) return '⛈️';
+        if (in_array($id, array(1087, 1273, 1276, 1279, 1282))) return '⛈️';
+
+        // --- Bruine (drizzle) ---
         if ($id >= 300 && $id < 400) return '🌦️';
+        if (in_array($id, array(1063, 1072, 1150, 1153, 1168))) return '🌦️';
+
+        // --- Pluie (rain) ---
         if ($id >= 500 && $id < 600) return '🌧️';
+        if (in_array($id, array(1171, 1180, 1183, 1186, 1189, 1192, 1195, 1198, 1201, 1240, 1243, 1246))) return '🌧️';
+
+        // --- Neige / grésil (snow / sleet) ---
         if ($id >= 600 && $id < 700) return '❄️';
-        if ($id >= 700 && $id < 800) return '🌫️';
+        if (in_array($id, array(1066, 1069, 1114, 1117, 1204, 1207, 1210, 1213, 1216, 1219, 1222, 1225, 1237, 1249, 1252, 1255, 1258, 1261, 1264))) return '❄️';
+
+        // --- Brume / brouillard / poussière / fumée ---
+        if (in_array($id, array(701, 711, 721, 731, 741, 751, 761, 762))) return '😶‍🌫️';
+        if (in_array($id, array(1012, 1015, 1018, 1030, 1033, 1036, 1039, 1042, 1045, 1048, 1135, 1147))) return '😶‍🌫️';
+
+        // --- Tornade / vent violent ---
+        if (in_array($id, array(771, 781))) return '🌪️';
+        if (in_array($id, array(1021, 1024, 1027))) return '🌪️';
+
         return '❔';
     }
 
@@ -885,9 +907,10 @@ class LandroidRTKScheduler {
         );
 
         $mow_duration_seconds = max(60, intval($config['mow_duration_minutes']) * 60);
+        $status_detail_early = null;
         if (!empty($state['current_mow_started_at']) && ($now - $state['current_mow_started_at']) <= $mow_duration_seconds) {
             $remaining_min = ceil(($mow_duration_seconds - ($now - $state['current_mow_started_at'])) / 60);
-            $rows[] = array('label' => 'Statut', 'ok' => true, 'detail' => "Tonte en cours (encore ~{$remaining_min} min avant fin estimée)");
+            $status_detail_early = "Tonte en cours (encore ~{$remaining_min} min avant fin estimée)";
         }
 
         // --- Espacement ---
@@ -945,15 +968,19 @@ class LandroidRTKScheduler {
                 }
             }
         }
-        $rows[] = array('label' => 'Aucune pluie détectée actuellement', 'ok' => !$rain_triggered, 'detail' => $rain_triggered ? ('Pluie détectée : ' . $rain_label) : 'Pas de pluie');
-
-        // --- Délai post-pluie ---
-        $rain_wait_ok = empty($state['rain_interrupt_until']) || $now >= $state['rain_interrupt_until'];
-        $rain_wait_detail = '—';
-        if (!empty($state['rain_interrupt_until']) && $now < $state['rain_interrupt_until']) {
-            $rain_wait_detail = 'Encore ' . ceil(($state['rain_interrupt_until'] - $now) / 60) . ' min avant reprise possible';
+        // --- Pluie / délai post-pluie / tonte en cours (ligne combinée) ---
+        $status_detail = null;
+        if ($rain_triggered) {
+            $status_detail = "Pluie en cours ({$rain_label}) — pas de redémarrage tant qu'il pleut";
+        } elseif (!empty($state['rain_interrupt_until']) && $now < $state['rain_interrupt_until']) {
+            $remaining_min = ceil(($state['rain_interrupt_until'] - $now) / 60);
+            $status_detail = "En attente du délai après pluie (encore {$remaining_min} min)";
+        } else {
+            $status_detail = $status_detail_early;
         }
-        $rows[] = array('label' => 'Pas en attente post-pluie', 'ok' => $rain_wait_ok, 'detail' => $rain_wait_detail);
+        if ($status_detail !== null) {
+            $rows[] = array('label' => 'Statut', 'ok' => true, 'detail' => $status_detail);
+        }
 
         // --- Humidité ---
         $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
