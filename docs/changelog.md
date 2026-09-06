@@ -17,6 +17,10 @@
 - **Bug corrigé** : le suivi du délai d'humidité (compteur avant de considérer la pelouse assez sèche) était remis à zéro uniquement pendant la plage horaire de tonte. Si l'humidité remontait au-dessus du seuil en dehors de cette fenêtre (la nuit par exemple), le compteur n'était jamais réinitialisé et pouvait rester périmé, faisant croire à tort que le délai était déjà écoulé. Le suivi tourne désormais à chaque cycle, quelle que soit l'heure.
 - Le compteur de délai d'humidité est réinitialisé automatiquement si le seuil est abaissé (plus strict) ; il est conservé si le seuil est relevé (plus permissif).
 - La notification de démarrage de tonte affiche désormais depuis combien de temps l'humidité est passée sous le seuil (ex: "65% (depuis 42 min)").
+- **Correction** : `resolveCmd()` acceptait un simple ID numérique tapé au clavier comme commande valide (pouvant coïncider par erreur avec une vraie commande). Seul le format tag Jeedom complet `#[Objet][Équipement][Commande]#` est désormais accepté.
+- **Nouveau champ "Durée de tonte estimée"** (30 à 360 min, défaut 120), distinct de la marge : la marge était utilisée à tort pour déterminer la fenêtre "tonte en cours" servant à filtrer les fausses alertes pluie (ex: robot sans garage dont le capteur se déclenche des heures après la fin réelle de la tonte). Ce champ dédié corrige cette confusion.
+- Ajout d'une ligne "Statut" (tonte en cours, avec temps restant estimé) dans le tableau "État des conditions de démarrage".
+- Ajout de courtes descriptions au-dessus du tableau de notifications, expliquant à quoi correspond chaque case à cocher.
 
 ## 1.0.0
 - Version initiale : synchronisation des tondeuses Worx Vision, commandes info/action, cron de rafraîchissement automatique.

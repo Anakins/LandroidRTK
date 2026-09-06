@@ -22,19 +22,21 @@ class LandroidRTKScheduler {
             return null;
         }
         $input = trim($input);
-        if (is_numeric($input)) {
-            $cmd = cmd::byId(intval($input));
-            return is_object($cmd) ? $cmd : null;
+        // On exige le format tag Jeedom complet #[Objet][Équipement][Commande]#
+        // (celui inséré automatiquement par le sélecteur). Un simple ID
+        // numérique tapé au clavier n'est plus accepté : il pourrait
+        // coïncider par hasard avec une vraie commande et sembler valide
+        // à tort, alors que ce n'est pas ce que l'utilisateur voulait dire.
+        if (!preg_match('/^#\[[^\]]*\]\[[^\]]*\]\[[^\]]*\]#$/', $input)) {
+            return null;
         }
-        if (strpos($input, '#') !== false) {
-            try {
-                $resolved = cmd::humanReadableToCmd($input);
-                if ($resolved != $input && preg_match('/#([0-9]+)#/', $resolved, $m)) {
-                    $cmd = cmd::byId($m[1]);
-                    return is_object($cmd) ? $cmd : null;
-                }
-            } catch (\Throwable $e) {
+        try {
+            $resolved = cmd::humanReadableToCmd($input);
+            if ($resolved != $input && preg_match('/#([0-9]+)#/', $resolved, $m)) {
+                $cmd = cmd::byId($m[1]);
+                return is_object($cmd) ? $cmd : null;
             }
+        } catch (\Throwable $e) {
         }
         return null;
     }
@@ -310,6 +312,7 @@ class LandroidRTKScheduler {
             'time_start_cmd_id' => '',
             'time_end_cmd_id' => '',
             'margin_minutes' => '0',
+            'mow_duration_minutes' => '120',
             'spacing_days' => '1',
             // Pluie : 2 emplacements fixes, pas une liste.
             // 1) Le capteur pluie natif du robot (lecture seule, juste
@@ -428,6 +431,9 @@ class LandroidRTKScheduler {
 
         if (!is_numeric($config['margin_minutes']) || $config['margin_minutes'] < 0) {
             $errors[] = "La marge avant l'heure de fin doit être un nombre positif ou nul.";
+        }
+        if (!is_numeric($config['mow_duration_minutes']) || $config['mow_duration_minutes'] < 30 || $config['mow_duration_minutes'] > 360) {
+            $errors[] = "La durée de tonte estimée doit être comprise entre 30 et 360 minutes (6h).";
         }
         if (!is_numeric($config['spacing_days']) || $config['spacing_days'] < 1 || $config['spacing_days'] > 28) {
             $errors[] = "L'espacement entre 2 tontes doit être compris entre 1 et 28 jours.";
@@ -878,6 +884,12 @@ class LandroidRTKScheduler {
             'detail' => $already_mowed ? 'Dernière tonte : aujourd\'hui' : ($state['last_mow_date'] ? 'Dernière tonte : ' . $state['last_mow_date'] : 'Aucune tonte enregistrée'),
         );
 
+        $mow_duration_seconds = max(60, intval($config['mow_duration_minutes']) * 60);
+        if (!empty($state['current_mow_started_at']) && ($now - $state['current_mow_started_at']) <= $mow_duration_seconds) {
+            $remaining_min = ceil(($mow_duration_seconds - ($now - $state['current_mow_started_at'])) / 60);
+            $rows[] = array('label' => 'Statut', 'ok' => true, 'detail' => "Tonte en cours (encore ~{$remaining_min} min avant fin estimée)");
+        }
+
         // --- Espacement ---
         $spacing_ok = true;
         $spacing_detail = '—';
@@ -1022,12 +1034,12 @@ class LandroidRTKScheduler {
         $today = date('Y-m-d', $now);
         $now_minutes = intval(date('H', $now)) * 60 + intval(date('i', $now));
 
-        // La marge (voir champ "Marge avant l'heure de fin") sert aussi de
-        // durée de tonte estimée : tant qu'on est dans cette fenêtre depuis
-        // le dernier démarrage déclenché par le planificateur, on considère
-        // qu'une tonte est potentiellement en cours.
-        $margin_seconds = max(60, intval($config['margin_minutes']) * 60);
-        $during_mow = !empty($state['current_mow_started_at']) && ($now - $state['current_mow_started_at']) <= $margin_seconds;
+        // Durée de tonte estimée (distincte de la marge avant l'heure de
+        // fin) : sert à distinguer une vraie pluie pendant une tonte en
+        // cours d'une fausse alerte plus tard le même jour, sans rapport
+        // avec une tonte déjà terminée depuis longtemps.
+        $mow_duration_seconds = max(60, intval($config['mow_duration_minutes']) * 60);
+        $during_mow = !empty($state['current_mow_started_at']) && ($now - $state['current_mow_started_at']) <= $mow_duration_seconds;
 
         // --- Sécurité pluie : prioritaire sur tout le reste ---
         $rain_triggered = false;

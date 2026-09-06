@@ -107,6 +107,7 @@ function LandroidRTKScheduler_fillForm(_config) {
     $('#sched_time_start_cmd_id').val(_config.time_start_cmd_id || '800');
     $('#sched_time_end_cmd_id').val(_config.time_end_cmd_id || '1700');
     $('#sched_margin_minutes').val(_config.margin_minutes != null ? _config.margin_minutes : 0);
+    $('#sched_mow_duration_minutes').val(_config.mow_duration_minutes != null ? _config.mow_duration_minutes : 120);
     $('#sched_spacing_days').val(_config.spacing_days || 1);
 
     $('#sched_rain_own_enabled').prop('checked', _config.rain_own_enabled == '1');
@@ -411,6 +412,7 @@ function LandroidRTKScheduler_buildConfig() {
         time_start_cmd_id: $('#sched_time_start_cmd_id').val(),
         time_end_cmd_id: $('#sched_time_end_cmd_id').val(),
         margin_minutes: $('#sched_margin_minutes').val(),
+        mow_duration_minutes: $('#sched_mow_duration_minutes').val(),
         spacing_days: $('#sched_spacing_days').val(),
         rain_own_enabled: $('#sched_rain_own_enabled').is(':checked') ? '1' : '0',
         rain_extra_cmd_id: $('#sched_rain_extra_cmd_id').val(),
