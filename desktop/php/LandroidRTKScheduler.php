@@ -215,7 +215,7 @@ if (!isConnect()) {
             <div class="form-group">
                 <label class="col-sm-3 control-label">Seuil minimum</label>
                 <div class="col-sm-6" style="display:flex; align-items:center; gap:8px;">
-                    <input type="number" id="sched_temperature_min" class="form-control" min="6" max="18" style="width:80px;">
+                    <input type="number" id="sched_temperature_min" class="form-control" min="4" max="18" style="width:80px;">
                     <span>°C (6 à 18)</span>
                 </div>
                 <div class="col-sm-3"></div>

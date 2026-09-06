@@ -326,7 +326,7 @@ class LandroidRTKScheduler {
             'humidity_duration_minutes' => '180',
             // Optionnel : si vide, la température n'est pas prise en compte.
             'temperature_cmd_id' => '',
-            'temperature_min' => '10',
+            'temperature_min' => '8',
             'temperature_max' => '40',
             'condition_id_cmd_id' => '',
             'condition_cmd_id' => '',
@@ -484,7 +484,7 @@ class LandroidRTKScheduler {
                 }
             }
         }
-        if (!is_numeric($config['temperature_min']) || $config['temperature_min'] < 6 || $config['temperature_min'] > 18) {
+        if (!is_numeric($config['temperature_min']) || $config['temperature_min'] < 4 || $config['temperature_min'] > 18) {
             $errors[] = "Le seuil minimum de température (protection gel) doit être compris entre 6 et 18°C.";
         }
         if (!is_numeric($config['temperature_max']) || $config['temperature_max'] < 30 || $config['temperature_max'] > 50) {

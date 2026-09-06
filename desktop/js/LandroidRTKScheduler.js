@@ -120,7 +120,7 @@ function LandroidRTKScheduler_fillForm(_config) {
     $('#sched_humidity_duration_minutes').val(_config.humidity_duration_minutes != null ? _config.humidity_duration_minutes : 180);
     $('#sched_battery_min_percent').val(_config.battery_min_percent != null ? _config.battery_min_percent : 30);
     $('#sched_temperature_cmd_id').val(_config.temperature_cmd_id || '');
-    $('#sched_temperature_min').val(_config.temperature_min != null ? _config.temperature_min : 10);
+    $('#sched_temperature_min').val(_config.temperature_min != null ? _config.temperature_min : 8);
     $('#sched_temperature_max').val(_config.temperature_max != null ? _config.temperature_max : 40);
 
     $('#sched_condition_id_cmd_id').val(_config.condition_id_cmd_id || '');
