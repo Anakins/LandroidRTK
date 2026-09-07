@@ -5,6 +5,13 @@ require_once dirname(__FILE__) . '/LandroidRTKScheduler.class.php';
 
 class LandroidRTK extends eqLogic {
 
+    public function preRemove() {
+        $listener = listener::byClassAndFunction('LandroidRTKScheduler', 'onCmdChange', array('eqLogic_id' => intval($this->getId())));
+        if (is_object($listener)) {
+            $listener->remove();
+        }
+    }
+
     /*
      * Log un événement important sous DEUX niveaux ("info" et "default")
      * : les boutons "Niveau log" de Jeedom (Aucun/Défaut/Debug/Info/...)

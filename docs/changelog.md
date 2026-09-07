@@ -22,6 +22,8 @@
 - Ajout d'une ligne "Statut" (tonte en cours, avec temps restant estimé) dans le tableau "État des conditions de démarrage".
 - Ajout de courtes descriptions au-dessus du tableau de notifications, expliquant à quoi correspond chaque case à cocher.
 - La ligne "Statut" du tableau des conditions regroupe maintenant en un seul endroit l'état pluie en cours, le délai post-pluie restant, et la tonte en cours (auparavant sur deux lignes séparées "Aucune pluie détectée"/"Pas en attente post-pluie").
+- **Réaction instantanée** : en plus du cron toutes les 5 minutes (conservé comme filet de sécurité), le plugin réagit désormais immédiatement au changement de valeur de n'importe quelle commande surveillée (capteur pluie externe, humidité, température, condition météo), via le mécanisme `listener` natif de Jeedom — sans attendre le prochain passage cron.
+- **Correction** : la notification "pas de tonte" (quand seule la condition météo bloque) affichait un emoji pluie fixe (🌦️) au lieu de refléter la vraie condition actuelle (ex: "Couvert" affichait la pluie au lieu d'un nuage). Utilise maintenant `getEmoji()` comme partout ailleurs.
 - `getEmoji()` complétée avec les codes WeatherAPI.com manquants pour orage/bruine/pluie/neige (ne couvrait que les codes OpenWeatherMap). Ajout de deux catégories supplémentaires, finalement conservées : 😶‍🌫️ brume/brouillard/poussière/fumée, 🌪️ tornade/vent violent.
 
 ## 1.0.0

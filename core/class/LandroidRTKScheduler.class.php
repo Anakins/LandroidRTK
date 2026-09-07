@@ -389,6 +389,7 @@ class LandroidRTKScheduler {
 
         $eqLogic->setConfiguration('mowing_schedule', json_encode($config));
         $eqLogic->save();
+        self::syncListener($eqLogic);
     }
 
     /* ---------------------------------------------------------------- */
@@ -879,8 +880,62 @@ class LandroidRTKScheduler {
 
     public static function cronScheduler() {
         foreach (LandroidRTK::byType('LandroidRTK', true) as $eqLogic) {
+            self::syncListener($eqLogic); // auto-réparation si la ligne s'est perdue
             self::evaluate($eqLogic);
         }
+    }
+
+    // Réagit instantanément au changement de valeur de n'importe quelle
+    // commande externe surveillée (pluie externe, humidité, température,
+    // condition météo), en plus du cron toutes les 5 minutes (qui reste
+    // un filet de sécurité). Rebâti à chaque sauvegarde de config via
+    // syncListener().
+    public static function onCmdChange($_option) {
+        if (empty($_option['eqLogic_id'])) {
+            return;
+        }
+        $eqLogic = eqLogic::byId($_option['eqLogic_id']);
+        if (!is_object($eqLogic) || $eqLogic->getIsEnable() != 1) {
+            return;
+        }
+        try {
+            self::evaluate($eqLogic);
+        } catch (\Throwable $e) {
+            log::add('LandroidRTK', 'error', 'onCmdChange() : ' . $e->getMessage());
+        }
+    }
+
+    // (Re)construit le listener de cet équipement à partir des commandes
+    // actuellement configurées. Toujours reconstruit intégralement (pas
+    // de mise à jour incrémentale) pour éviter tout risque de doublon ou
+    // d'événement périmé après une modification de la config.
+    public static function syncListener($eqLogic) {
+        $config = self::getConfig($eqLogic);
+
+        $listener = listener::byClassAndFunction('LandroidRTKScheduler', 'onCmdChange', array('eqLogic_id' => intval($eqLogic->getId())));
+        if (is_object($listener)) {
+            $listener->remove();
+        }
+
+        $watched_keys = array('rain_extra_cmd_id', 'humidity_cmd_id', 'temperature_cmd_id', 'condition_id_cmd_id');
+        $tags = array();
+        foreach ($watched_keys as $key) {
+            if (!empty($config[$key])) {
+                $tags[] = $config[$key];
+            }
+        }
+        if (empty($tags)) {
+            return;
+        }
+
+        $listener = new listener();
+        $listener->setClass('LandroidRTKScheduler');
+        $listener->setFunction('onCmdChange');
+        $listener->setOption(array('eqLogic_id' => intval($eqLogic->getId())));
+        foreach ($tags as $tag) {
+            $listener->addEvent($tag);
+        }
+        $listener->save();
     }
 
     /**
@@ -1381,6 +1436,7 @@ class LandroidRTKScheduler {
         }
         $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
         $condition_label = self::getConditionLabel($config);
+        $condition_id = !empty($config['condition_id_cmd_id']) ? self::getCmdValue($config['condition_id_cmd_id']) : null;
 
         if ($reason == 'spacing') {
             $last_mow_str = !empty($state['last_mow_date']) ? date('d/m/Y', strtotime($state['last_mow_date'])) : 'inconnue';
@@ -1409,7 +1465,8 @@ class LandroidRTKScheduler {
         // humidité → batterie.
         $lines = array("💤 $msg");
         if ($condition_label !== null && $condition_label !== '') {
-            $lines[] = "🌦️ Condition météo actuelle : $condition_label";
+            $condition_emoji = self::getEmoji($condition_id);
+            $lines[] = "$condition_emoji Condition météo actuelle : $condition_label";
         }
         if (!empty($config['temperature_cmd_id'])) {
             $temp_val_line = self::getTemperatureValue($config);
