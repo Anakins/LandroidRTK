@@ -1436,6 +1436,7 @@ class LandroidRTKScheduler {
         }
         $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
         $condition_label = self::getConditionLabel($config);
+        $condition_id = !empty($config['condition_id_cmd_id']) ? self::getCmdValue($config['condition_id_cmd_id']) : null;
 
         if ($reason == 'spacing') {
             $last_mow_str = !empty($state['last_mow_date']) ? date('d/m/Y', strtotime($state['last_mow_date'])) : 'inconnue';
@@ -1464,7 +1465,8 @@ class LandroidRTKScheduler {
         // humidité → batterie.
         $lines = array("💤 $msg");
         if ($condition_label !== null && $condition_label !== '') {
-            $lines[] = "🌦️ Condition météo actuelle : $condition_label";
+            $condition_emoji = self::getEmoji($condition_id);
+            $lines[] = "$condition_emoji Condition météo actuelle : $condition_label";
         }
         if (!empty($config['temperature_cmd_id'])) {
             $temp_val_line = self::getTemperatureValue($config);
