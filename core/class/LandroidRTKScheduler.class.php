@@ -1158,6 +1158,21 @@ class LandroidRTKScheduler {
         }
 
         if ($rain_triggered) {
+            // Avant de renvoyer le robot à sa base et de notifier, on
+            // vérifie son statut RÉEL (remonté par le daemon Worx), plus
+            // fiable que nos propres variables de planification pour
+            // savoir s'il est déjà à l'arrêt. Sans ça, une pluie détectée
+            // un jour sans tonte (robot déjà à la station) déclenchait
+            // quand même l'action et la notification "rentre à sa base",
+            // ce qui n'a pas de sens.
+            $status_cmd = $eqLogic->getCmd(null, 'status');
+            $status_val = is_object($status_cmd) ? trim((string) $status_cmd->execCmd()) : '';
+            $already_home = in_array($status_val, array('Dans la station', 'En charge'), true);
+
+            if ($already_home) {
+                return;
+            }
+
             $interrupted = false;
             if ($during_mow) {
                 // La pluie est arrivée pendant une tonte en cours (avant la
