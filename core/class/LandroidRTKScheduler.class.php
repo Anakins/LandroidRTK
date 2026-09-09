@@ -1251,9 +1251,18 @@ class LandroidRTKScheduler {
             return; // déjà signalé par checkConfig(), on ne va pas plus loin
         }
         $latest_start = $end_min - intval($config['margin_minutes']);
-        if ($now_minutes < $start_min || $now_minutes > $latest_start) {
-            return; // hors plage de démarrage autorisée
+        if ($now_minutes < $start_min) {
+            return; // trop tôt, fenêtre pas encore ouverte aujourd'hui
         }
+        // IMPORTANT : si la fenêtre est déjà fermée ($now_minutes >
+        // $latest_start), on NE sort PAS ici — on continue volontairement
+        // l'évaluation ci-dessous (humidité, météo, température, batterie)
+        // afin de déterminer la VRAIE raison du blocage et de la notifier
+        // via notifyNotReady() (qui gère elle-même le fait d'attendre la
+        // fermeture de la fenêtre avant d'envoyer). Sortir ici en silence
+        // empêcherait à tort TOUTE notification "pas de tonte" autre que
+        // la raison "espacement" de partir un jour donné.
+        $window_closed = ($now_minutes > $latest_start);
 
         // --- Humidité (doit être sous le seuil depuis assez longtemps) ---
         // Le suivi (set/reset de humidity_low_since) est déjà fait plus
@@ -1327,6 +1336,16 @@ class LandroidRTKScheduler {
         $battery_min = floatval($config['battery_min_percent']);
         if (!is_numeric($battery_val) || floatval($battery_val) < $battery_min) {
             self::notifyNotReady($eqLogic, $config, $state, $today, 'battery');
+            return;
+        }
+
+        // --- Toutes les conditions "météo/robot" sont réunies, mais la
+        // fenêtre horaire du jour est déjà fermée (cas rare : ex. Jeedom
+        // relancé en cours de journée juste avant la fermeture) : on ne
+        // lance PAS une tonte hors-plage, on notifie et on réessaiera au
+        // prochain cycle (donc demain, une fois l'espacement respecté).
+        if ($window_closed) {
+            self::notifyNotReady($eqLogic, $config, $state, $today, 'window_closed');
             return;
         }
 
@@ -1466,6 +1485,8 @@ class LandroidRTKScheduler {
         } elseif ($reason == 'rain_interrupt') {
             $wait_min = !empty($state['rain_interrupt_until']) ? ceil(($state['rain_interrupt_until'] - time()) / 60) : 0;
             $msg = "{$eqLogic->getName()} attend encore environ {$wait_min} min avant de reprendre le cycle normal, le temps que le sol absorbe la pluie récente.";
+        } elseif ($reason == 'window_closed') {
+            $msg = "{$eqLogic->getName()} ne tondra pas aujourd'hui : toutes les autres conditions étaient réunies, mais la fenêtre horaire autorisée s'est refermée avant que le démarrage ait pu être lancé.";
         } elseif ($reason == 'weather') {
             // Toutes les autres conditions (humidité, température, batterie,
             // espacement) sont réunies : seule la condition météo actuelle
