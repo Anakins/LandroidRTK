@@ -15,9 +15,23 @@ var LandroidRTKScheduler_currentEqLogicId = null;
         if (_eqLogic && _eqLogic.id) {
             LandroidRTKScheduler_currentEqLogicId = _eqLogic.id;
             LandroidRTKScheduler_loadConfig(_eqLogic.id);
+            LandroidRTKScheduler_updateNotifTitlePlaceholder(_eqLogic.name);
         }
     };
 })();
+
+/* ------------------------------------------------------------------ */
+/* Notifications : titre par défaut suggéré = nom de l'équipement,     */
+/* en direct (mêmes principes que RoboProg).                           */
+/* ------------------------------------------------------------------ */
+function LandroidRTKScheduler_updateNotifTitlePlaceholder(_name) {
+    var name = (typeof _name === 'string' ? _name : ($('.eqLogicAttr[data-l1key="name"]').val() || '')).trim();
+    var placeholder = name ? (name.toUpperCase() + ' - TONTE') : '(nom de la tondeuse) - TONTE';
+    $('#table_notifications .notif_title, .notificationTemplate .notif_title').attr('placeholder', placeholder);
+}
+$(document).on('input', '.eqLogicAttr[data-l1key="name"]', function () {
+    LandroidRTKScheduler_updateNotifTitlePlaceholder();
+});
 
 /* ------------------------------------------------------------------ */
 /* Chargement de la configuration existante dans le formulaire         */

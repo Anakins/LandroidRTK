@@ -1,6 +1,7 @@
 # Changelog
 
 ## Non publié
+- **Amélioration** : le champ "Titre" des notifications affiche désormais en direct le nom de l'équipement (tondeuse) comme suggestion (ex. `WORX - TONTE` au lieu de `(nom de la tondeuse) - TONTE`), mis à jour en temps réel si vous modifiez le nom de l'équipement. Même principe que sur RoboProg.
 - **Bug corrigé (important)** : une fois la fenêtre horaire de tonte fermée pour la journée, la notification "pas de tonte" (raison humidité, météo, température ou batterie) n'était en réalité **jamais envoyée** — le contrôle de plage horaire sortait en silence avant même d'atteindre les vérifications qui déclenchent cette notification. Seule la raison "espacement entre tontes" fonctionnait (vérifiée avant ce contrôle). Corrigé : l'évaluation continue désormais après la fermeture de la fenêtre pour déterminer la vraie raison et la notifier normalement. Ajout au passage d'un nouveau motif "window_closed" pour le cas rare où toutes les conditions finissent par être réunies mais après la fermeture de la fenêtre (pas de démarrage hors-plage, notification + nouvel essai le lendemain).
 
 ## 1.1.0 (2026-09-05)
