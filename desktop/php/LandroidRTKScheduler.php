@@ -96,7 +96,7 @@ if (!isConnect()) {
                 <div class="col-sm-3" style="padding-top:7px;">
                     <span id="sched_latest_start_preview" class="text-muted"></span>
                 </div>
-                <div class="col-sm-9">
+                <div class="col-sm-9 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">Le robot ne démarrera plus une tonte si elle risque de se terminer après (heure de fin − cette marge). Ex : fin=20h, marge=180min → dernier départ possible 17h.
                     <br>💡 Astuce : en combinant l'heure de fin avec le <strong>coucher du soleil</strong> (fourni par un plugin météo externe) et une marge proche du <strong>temps de tonte habituel</strong> de votre pelouse, vous évitez que le robot termine (ou soit encore dehors) une fois la nuit tombée.</span>
                 </div>
@@ -107,8 +107,7 @@ if (!isConnect()) {
                     <input type="number" id="sched_mow_duration_minutes" class="form-control" min="30" max="360" style="width:80px;">
                     <span>min (30 à 360, soit 6h max)</span>
                 </div>
-                <div class="col-sm-3"></div>
-                <div class="col-sm-9">
+                <div class="col-sm-9 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">🌧️ Sert à détecter une vraie pluie pendant une tonte en cours (la tonte du jour est alors annulée, et le robot attend le délai réglé ci-dessous en section Pluie avant de repartir) tout en ignorant les fausses alertes qui arriveraient bien plus tard le même jour, une fois la tonte déjà terminée depuis longtemps. Distincte de la marge ci-dessus. Par défaut : 120 min.</span>
                 </div>
             </div>
@@ -156,7 +155,7 @@ if (!isConnect()) {
                 <div class="col-sm-2" style="padding-top:7px;">
                     <span class="cmdValuePreview text-muted" data-input="#sched_rain_extra_cmd_id"></span>
                 </div>
-                <div class="col-sm-12">
+                <div class="col-sm-9 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">Utilisé seulement si une commande est renseignée. Exemple : pour un pluviomètre Netatmo, utiliser "≠" avec la valeur "0" (il pleut quand le niveau de pluie est différent de 0).</span>
                 </div>
             </div>
@@ -167,8 +166,7 @@ if (!isConnect()) {
                     <input type="number" id="sched_rain_interrupt_minutes" class="form-control" min="20" max="120" style="width:80px;">
                     <span>min (20 à 120)</span>
                 </div>
-                <div class="col-sm-3"></div>
-                <div class="col-sm-9">
+                <div class="col-sm-9 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">Délai minimum nécessaire à l'absorption de la pluie par le sol, et/ou au rafraîchissement des plugins météo (certains toutes les 30 min). Par défaut : 60 min.</span>
                 </div>
             </div>
@@ -228,8 +226,7 @@ if (!isConnect()) {
                     <input type="number" id="sched_temperature_min" class="form-control" min="4" max="18" style="width:80px;">
                     <span>°C (4 à 18)</span>
                 </div>
-                <div class="col-sm-3"></div>
-                <div class="col-sm-9">
+                <div class="col-sm-9 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">Protection gel : le robot ne tond pas en dessous de ce seuil, pour ne pas abîmer une pelouse potentiellement gelée. Par défaut : 8°C.</span>
                 </div>
             </div>
@@ -239,8 +236,7 @@ if (!isConnect()) {
                     <input type="number" id="sched_temperature_max" class="form-control" min="30" max="50" style="width:80px;">
                     <span>°C (30 à 50)</span>
                 </div>
-                <div class="col-sm-3"></div>
-                <div class="col-sm-9">
+                <div class="col-sm-9 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">Protection canicule : le robot ne tond pas au-dessus de ce seuil. Par défaut : 40°C.</span>
                 </div>
             </div>
