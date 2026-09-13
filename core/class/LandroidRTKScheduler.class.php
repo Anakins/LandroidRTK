@@ -1414,7 +1414,21 @@ class LandroidRTKScheduler {
      * les destinataires comme Jeedom Connect qui rendent le message en
      * HTML et ignorent les \n bruts).
      */
+    // Supprime UNIQUEMENT le tout dernier caractère d'une ligne si c'est
+    // un espace (pas un trim complet : on ne touche pas aux espaces en
+    // début de ligne ni aux espaces internes, qui peuvent servir à aligner
+    // du texte en colonnes). Corrige un bug observé où un espace en tout
+    // dernier caractère d'un message envoyé à Discord (via JeedomBot)
+    // empêche le retour à la ligne suivant de fonctionner.
+    private static function stripTrailingSpace($line) {
+        if (substr($line, -1) === ' ') {
+            return substr($line, 0, -1);
+        }
+        return $line;
+    }
+
     private static function buildDualMessage($parts) {
+        $parts = array_map(array(__CLASS__, 'stripTrailingSpace'), $parts);
         $plain = implode("\n", $parts);
         $html = implode('<br/>', $parts);
         return array('html' => $html, 'plain' => $plain);
