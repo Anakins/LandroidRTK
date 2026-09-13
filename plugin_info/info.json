@@ -7,7 +7,7 @@
         "en_US": "Control your Worx Landroid Vision Cloud robot mowers (2WD/4WD, with RTK/GPS) through the official Worx cloud API, with real-time monitoring and smart weather-based automatic scheduling. Deliberately does NOT support older Worx models without RTK (already covered by the worxLandroidS plugin).<br/><br/>- Automatic sync of mowers from your Worx account (serial number, model, dedicated image)<br/>- Real-time monitoring via an always-connected daemon (MQTT): battery, status, errors, mowing position<br/>- Manual commands: Start, Stop, Return home, Edge mowing, Party mode (on/off)<br/>- Reads the smart edge-trim status<br/>- Mower statuses and errors translated into your language<br/>- Automatic alert on prolonged connection loss<br/>- Automatic mowing schedule based on weather, humidity and rain<br/>- Rain safety: automatic return home and delayed restart once the ground has dried<br/>- Temperature protections (frost and heatwave) and a minimum battery threshold before starting<br/>- Customizable notifications (Discord, Jeedom mobile app...)<br/>- Automatic detection of missing equipment, to prevent any false triggering<br/>- Dedicated dashboard widget with quick-adjust sliders (margin, spacing, humidity threshold)<br/>- Detailed status table for every starting condition (humidity, temperature, weather, battery...)"
     },
     "licence": "AGPL",
-    "author": "Anakin en dev",
+    "author": "Anakin",
     "require": "4.2",
     "category": "devicecommunication",
     "changelog": "https://github.com/Anakins/LandroidRTK/blob/master/docs/changelog.md",
@@ -29,5 +29,5 @@
     "hasDependency": true,
     "maxDependancyInstallTime": 20,
     "screenshot": [],
-    "state": "experimental"
+    "state": "stable"
 }
