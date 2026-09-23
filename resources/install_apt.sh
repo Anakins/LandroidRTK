@@ -75,6 +75,31 @@ echo "Version Python du venv : $("$VENV_DIR/bin/python3" --version 2>&1)"
 
 run_step  70 "Mise à jour de pip et wheel" sudo "$VENV_DIR/bin/python3" -m pip install --upgrade pip wheel
 run_step  90 "Installation de pyworxcloud" sudo "$VENV_DIR/bin/python3" -m pip install --force-reinstall --upgrade pyworxcloud
+
+# Correctif de compatibilité Python < 3.10 (ex: Debian 11, Python 3.9) :
+# pyworxcloud/utils/schedule_codec.py utilise "@dataclass(slots=True)"
+# depuis la version 6.1.0, une syntaxe apparue en Python 3.10. Son import
+# est inconditionnel (pyworxcloud/utils/__init__.py), donc même sans
+# utiliser cette fonctionnalité (Schedule CRUD, non utilisée par ce
+# plugin), l'import de tout le module casse sur Python < 3.10 sans ce
+# correctif. On retire juste ce paramètre optionnel (optimisation mémoire
+# uniquement, aucun changement de comportement) plutôt que de figer une
+# ancienne version : aucune version ne combine à la fois l'absence de
+# slots=True (< 6.1.0) ET le nom actuel set_party_mode (>= 6.2.0, utilisé
+# par worx_helper.py), donc figer une version casserait autre chose.
+step 92 "Correctif de compatibilité Python < 3.10 (pyworxcloud)"
+SCHEDULE_CODEC=$(compgen -G "${VENV_DIR}/lib/python3*/site-packages/pyworxcloud/utils/schedule_codec.py" | head -n1)
+if [ -n "$SCHEDULE_CODEC" ] && sudo sed -i 's/@dataclass(slots=True)/@dataclass/' "$SCHEDULE_CODEC"; then
+    printf "[  92%% ] : Correctif de compatibilité Python < 3.10 (pyworxcloud) : "
+    ok
+else
+    printf "[  92%% ] : Correctif de compatibilité Python < 3.10 (pyworxcloud) : "
+    ko
+    echo "Fichier schedule_codec.py introuvable (chemin attendu : ${VENV_DIR}/lib/python3*/site-packages/pyworxcloud/utils/schedule_codec.py) ou échec du correctif."
+    rm -f "$PROGRESS_FILE"
+    exit 1
+fi
+
 run_step  95 "Attribution des droits (www-data)" sudo chown -R www-data:www-data "$VENV_DIR"
 
 step 99 "Vérification finale"
