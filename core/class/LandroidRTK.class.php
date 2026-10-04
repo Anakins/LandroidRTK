@@ -40,7 +40,17 @@ class LandroidRTK extends eqLogic {
      * touche JAMAIS à celles qui existent déjà (conf/widget utilisateur
      * préservée).
      */
-    public static $INFO_COMMANDS = array(
+    // IMPORTANT : INFO_COMMANDS, ACTION_COMMANDS et MODEL_LABELS sont des
+    // constantes de classe (const) et non des propriétés statiques. Le
+    // cœur de Jeedom (DB::getFields) parcourt TOUTES les propriétés d'une
+    // classe héritant d'eqLogic via la réflexion PHP, sans filtrer par
+    // visibilité ni exclure le statique, et ne saute que celles dont le
+    // nom commence par "_" : toute propriété statique 'normale' est donc
+    // prise à tort pour une colonne de la table eqLogic à insérer
+    // ("Unknown column ... in 'field list'"). Une constante n'est pas une
+    // propriété pour l'API de réflexion, donc ce problème ne peut pas se
+    // produire.
+    const INFO_COMMANDS = array(
         array('logicalId' => 'last_sync',     'name' => 'Dernière synchro',  'type' => 'string',  'unite' => '',  'order' => 0),
         array('logicalId' => 'serial',        'name' => 'Numéro de série',  'type' => 'string',  'unite' => '',  'order' => 1),
         array('logicalId' => 'online',        'name' => 'En ligne',         'type' => 'string',  'unite' => '',  'order' => 2),
@@ -62,7 +72,7 @@ class LandroidRTK extends eqLogic {
      * Commandes "action". Le logicalId correspond EXACTEMENT au mot-clé
      * attendu par worx_helper.py (mode "action").
      */
-    public static $ACTION_COMMANDS = array(
+    const ACTION_COMMANDS = array(
         array('logicalId' => 'start',      'name' => 'Start',                  'action' => 'start',     'order' => 14, 'lineBreak' => '0'),
         array('logicalId' => 'pause',      'name' => 'Stop',                   'action' => 'pause',     'order' => 15, 'lineBreak' => '0'),
         array('logicalId' => 'home',       'name' => 'Maison',                 'action' => 'home',      'order' => 16, 'lineBreak' => '0'),
@@ -165,7 +175,7 @@ class LandroidRTK extends eqLogic {
      */
     // Libellés lisibles par type de modèle, utilisés pour le nom par défaut
     // et pour choisir l'icône (voir resources/img/<model_type>.png).
-    public static $MODEL_LABELS = array(
+    const MODEL_LABELS = array(
         'vision_4wd'     => 'Landroid Vision 4WD',
         'vision_2wd'     => 'Landroid Vision 2WD',
         'vision_generic' => 'Landroid Vision',
@@ -205,7 +215,7 @@ class LandroidRTK extends eqLogic {
             }
 
             $model_type = isset($dev['model_type']) ? $dev['model_type'] : 'vision_generic';
-            if (!isset(self::$MODEL_LABELS[$model_type])) {
+            if (!isset(self::MODEL_LABELS[$model_type])) {
                 $model_type = 'vision_generic';
             }
 
@@ -224,7 +234,7 @@ class LandroidRTK extends eqLogic {
                 if ($api_name != '' && $api_name != $serial) {
                     $eqLogic->setName($api_name);
                 } else {
-                    $eqLogic->setName(self::$MODEL_LABELS[$model_type]);
+                    $eqLogic->setName(self::MODEL_LABELS[$model_type]);
                 }
 
                 $eqLogic->setConfiguration('model_type', $model_type);
@@ -280,7 +290,7 @@ class LandroidRTK extends eqLogic {
      * jamais de modification d'une commande déjà existante).
      */
     public static function ensureCommands($eqLogic) {
-        foreach (self::$INFO_COMMANDS as $def) {
+        foreach (self::INFO_COMMANDS as $def) {
             $cmd = $eqLogic->getCmd(null, $def['logicalId']);
             if (is_object($cmd)) {
                 // Commande déjà existante : on ne touche à rien sauf
@@ -332,7 +342,7 @@ class LandroidRTK extends eqLogic {
             $cmd->save();
         }
 
-        foreach (self::$ACTION_COMMANDS as $def) {
+        foreach (self::ACTION_COMMANDS as $def) {
             $cmd = $eqLogic->getCmd(null, $def['logicalId']);
             if (is_object($cmd)) {
                 $needs_save = false;
@@ -432,7 +442,7 @@ class LandroidRTK extends eqLogic {
     /* ---------------------------------------------------------------- */
 
     public static function getModelImageUrl($model_type) {
-        if (!isset(self::$MODEL_LABELS[$model_type])) {
+        if (!isset(self::MODEL_LABELS[$model_type])) {
             $model_type = 'vision_generic';
         }
         return 'plugins/LandroidRTK/desktop/img/' . $model_type . '.png';

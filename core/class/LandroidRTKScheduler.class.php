@@ -1462,6 +1462,24 @@ class LandroidRTKScheduler {
         return array('valid' => true, 'value' => self::formatMinutes($latest_start), 'error' => null);
     }
 
+    /**
+     * Date (Y-m-d) de la prochaine tonte possible, pour les notifications
+     * "ne tondra pas" — envoyées une fois la fenêtre du jour refermée,
+     * donc au plus tôt demain, ou plus tard si l'espacement entre deux
+     * tontes n'est pas encore écoulé à cette date (dernière tonte +
+     * espacement).
+     */
+    private static function nextMowDateAfterToday($state, $config, $today) {
+        $next_date = date('Y-m-d', strtotime($today . ' +1 day'));
+        if (!empty($state['last_mow_date'])) {
+            $by_spacing = date('Y-m-d', strtotime($state['last_mow_date'] . " +{$config['spacing_days']} days"));
+            if ($by_spacing > $next_date) {
+                $next_date = $by_spacing;
+            }
+        }
+        return $next_date;
+    }
+
     private static function notifyNotReady($eqLogic, $config, $state, $today, $reason) {
         // On attend la fermeture de la fenêtre de tonte du jour avant de
         // notifier (plutôt que dès la première vérification, potentiellement
@@ -1487,8 +1505,9 @@ class LandroidRTKScheduler {
         $condition_id = !empty($config['condition_id_cmd_id']) ? self::getCmdValue($config['condition_id_cmd_id']) : null;
 
         if ($reason == 'spacing') {
-            $last_mow_str = !empty($state['last_mow_date']) ? date('d/m/Y', strtotime($state['last_mow_date'])) : 'inconnue';
-            $msg = "{$eqLogic->getName()} ne tondra pas aujourd'hui car il est programmé pour tondre tous les {$config['spacing_days']} jours. La dernière tonte était le $last_mow_str.";
+            // La date de la prochaine tonte prévue (ligne 📅 ci-dessous)
+            // remplace l'ancien rappel "tous les X jours / dernière tonte le Y".
+            $msg = "{$eqLogic->getName()} ne tondra pas aujourd'hui : l'espacement prévu entre deux tontes n'est pas encore écoulé.";
         } elseif ($reason == 'temperature_low') {
             $msg = "{$eqLogic->getName()} ne tondra pas aujourd'hui car la température est en dessous du seuil minimum de {$config['temperature_min']}°C (risque d'abîmer une pelouse potentiellement gelée).";
         } elseif ($reason == 'temperature_high') {
@@ -1511,9 +1530,11 @@ class LandroidRTKScheduler {
         }
 
         // Ordre volontairement identique partout (notifications ET logs) :
-        // annonce → météo (condition) → température (si réglée) →
-        // humidité → batterie.
+        // annonce → prochaine tonte prévue → météo (condition) →
+        // température (si réglée) → humidité → batterie.
         $lines = array("💤 $msg");
+        $next_date = self::nextMowDateAfterToday($state, $config, $today);
+        $lines[] = "📅 Prochaine tonte prévue le " . date('d/m/Y', strtotime($next_date)) . ".";
         if ($condition_label !== null && $condition_label !== '') {
             $condition_emoji = self::getEmoji($condition_id);
             $lines[] = "$condition_emoji Condition météo actuelle : $condition_label";
