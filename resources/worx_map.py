@@ -34,16 +34,6 @@ def _finite(value):
     return number if math.isfinite(number) else None
 
 
-def rssi_value(device):
-    """Force du signal WiFi en dBm (valeur négative), ou None si inconnue."""
-    value = _finite(getattr(device, "rssi", None))
-    if value is None:
-        return None
-    value = int(round(value))
-    # Valeurs plausibles uniquement : 0 ou positif = "pas de mesure".
-    return value if -127 <= value < 0 else None
-
-
 def rtk_map_id(device):
     """Identifiant de la carte RTK, tel que rapporté dans la config du robot."""
     cfg = getattr(device, "raw_cfg", None)
@@ -90,18 +80,23 @@ def rtk_heading(device):
     return round((90.0 - yaw) % 360.0, 1)
 
 
-async def fetch_rtk_map(cloud, map_id):
-    """Télécharge la géométrie de la carte RTK. Retourne un dict ou None."""
+async def fetch_rtk_map_status(cloud, map_id):
+    """Télécharge la géométrie de la carte RTK.
+
+    Retourne (donnees, raison) : `donnees` est un dict, ou None avec une
+    `raison` lisible (jamais de coordonnée ni de jeton) pour l'afficher dans
+    l'onglet Carte. Ne lève jamais d'exception.
+    """
     if not map_id:
-        return None
+        return None, "identifiant de carte absent"
     try:
         api = getattr(cloud, "_api", None)
         if api is None:
-            return None
+            return None, "interface interne de pyworxcloud introuvable (cloud._api)"
         await api.check_token()
         endpoint = getattr(getattr(api, "cloud", None), "ENDPOINT", None)
         if not endpoint:
-            return None
+            return None, "adresse du service Worx introuvable (cloud.ENDPOINT)"
         url = f"https://{endpoint}/api/v2/maps/{map_id}"
         session = await api._ensure_session()
         if AGET is not None and HEADERS is not None:
@@ -111,11 +106,36 @@ async def fetch_rtk_map(cloud, map_id):
                        "Authorization": f"Bearer {api.access_token}"}
             async with session.get(url, headers=headers) as resp:
                 if resp.status >= 400:
-                    return None
+                    return None, f"le service Worx a répondu HTTP {resp.status}"
                 data = await resp.json()
-    except Exception:
-        return None
-    return data if isinstance(data, dict) else None
+    except Exception as exc:
+        return None, f"requête refusée ou échouée ({type(exc).__name__})"
+    if not isinstance(data, dict):
+        return None, f"réponse inattendue du service Worx (type {type(data).__name__})"
+    if not data:
+        return None, "réponse vide du service Worx"
+    return data, None
+
+
+async def fetch_rtk_map(cloud, map_id):
+    """Comme fetch_rtk_map_status, sans la raison. Retourne un dict ou None."""
+    data, _reason = await fetch_rtk_map_status(cloud, map_id)
+    return data
+
+
+def cfg_debug_keys(device):
+    """Noms (jamais les valeurs) des clés de la configuration, pour trouver
+    où se trouve l'identifiant de carte. Aucune coordonnée."""
+    cfg = getattr(device, "raw_cfg", None)
+    if not isinstance(cfg, dict):
+        return "configuration du robot non reçue (raw_cfg absent)"
+    parts = ["cfg=" + ",".join(sorted(str(k) for k in cfg.keys())[:40])]
+    rtk = cfg.get("rtk")
+    if isinstance(rtk, dict):
+        parts.append("cfg.rtk=" + ",".join(sorted(str(k) for k in rtk.keys())))
+    else:
+        parts.append("cfg.rtk absent")
+    return " ; ".join(parts)
 
 
 # ---------------------------------------------------------------------

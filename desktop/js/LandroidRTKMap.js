@@ -10,12 +10,13 @@
  */
 
 var LandroidRTKMap = (function () {
-    var W = 900, H = 620, PAD = 48;
+    var BASE_W = 900, BASE_H = 620, BASE_PAD = 48;
+    var COMPACT_SIDE = 520, COMPACT_PAD = 22;
     var TRAIL_MAX_GAP_S = 300;          // coupure de la trace après 5 min sans point
     var TRAIL_MAX_SEGMENT_M = 35;       // ... ou saut de position de plus de 35 m
     var TRAIL_MIN_STEP_M = 0.25;
     var TRAIL_MARGIN_M = 12;            // points hors du jardin (+ marge) ignorés
-    var SWATH_MIN_PX = 3, SWATH_MAX_PX = 32;
+    var SWATH_MIN_PX = 6, SWATH_MAX_PX = 64, SWATH_FACTOR = 2;
     var FADE_S = 12 * 3600;
     var OP_MAX = 0.58, OP_MIN = 0.30;
 
@@ -107,7 +108,12 @@ var LandroidRTKMap = (function () {
             p[1] >= b.minLon - dLon && p[1] <= b.maxLon + dLon;
     }
 
-    function projector(points) {
+    function extentM(b) {
+        var lonScale = Math.max(Math.cos(((b.minLat + b.maxLat) / 2) * Math.PI / 180), 0.1);
+        return {w: Math.max((b.maxLon - b.minLon) * 111320 * lonScale, 1), h: Math.max((b.maxLat - b.minLat) * 110540, 1)};
+    }
+
+    function projector(points, W, H, PAD) {
         var b = bounds(points);
         var lonScale = Math.max(Math.cos(((b.minLat + b.maxLat) / 2) * Math.PI / 180), 0.1);
         var wM = Math.max((b.maxLon - b.minLon) * 111320 * lonScale, 1);
@@ -175,20 +181,24 @@ var LandroidRTKMap = (function () {
             '<path d="M 3 -11 L -7 2 H 0 L -4 12 L 8 -4 H 2 Z" fill="#fff"/></g>';
     }
 
-    function placeholder(message) {
+    function placeholder(message, W, H) {
         return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img">' +
             '<rect width="100%" height="100%" fill="#101412"/>' +
             '<text x="50%" y="50%" fill="#f8faf4" font-size="24" font-family="Arial,sans-serif" text-anchor="middle">' +
             String(message).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text></svg>';
     }
 
-    /* data = réponse de l'action ajax getMapData. Retourne {svg, info}. */
-    function build(data) {
+    /* data = réponse de l'action ajax getMapData. Retourne {svg, info}.
+     * opts.compact : vignette recadrée sur le jardin (zones + station) avec
+     * une petite marge, au lieu de la grande carte de l'onglet. */
+    function build(data, opts) {
         data = data || {};
+        opts = opts || {};
+        var W = BASE_W, H = BASE_H, PAD = BASE_PAD;
         var map = data.map;
         var info = {zones: 0, exclusions: 0, trailPoints: 0, hasMap: false};
         if (!map || typeof map !== 'object') {
-            return {svg: placeholder('Aucune carte RTK reçue pour l\'instant'), info: info};
+            return {svg: placeholder('Aucune carte RTK reçue pour l\'instant', W, H), info: info};
         }
         var sh = shapes(map);
         var st = stations(map);
@@ -214,13 +224,23 @@ var LandroidRTKMap = (function () {
         if (pos) { all.push(pos); }
         segs.forEach(function (sg) { sg.forEach(function (p) { all.push([p[1], p[2]]); info.trailPoints++; }); });
         if (!all.length) {
-            return {svg: placeholder('La carte RTK ne contient aucun point'), info: info};
+            return {svg: placeholder('La carte RTK ne contient aucun point', W, H), info: info};
         }
 
-        var proj = projector(all);
-        var swath = Math.max(SWATH_MIN_PX, Math.min(SWATH_MAX_PX, (parseFloat(data.cutting_width_m) || 0.18) * proj.scale));
+        var fitPoints = all;
+        if (opts.compact && geo.length) {
+            // Fenêtre = emprise du jardin seul ; le format suit celui du jardin.
+            fitPoints = geo;
+            var ext = extentM(bounds(geo));
+            var k = (COMPACT_SIDE - 2 * COMPACT_PAD) / Math.max(ext.w, ext.h);
+            PAD = COMPACT_PAD;
+            W = Math.round(ext.w * k + 2 * PAD);
+            H = Math.round(ext.h * k + 2 * PAD);
+        }
+        var proj = projector(fitPoints, W, H, PAD);
+        var swath = Math.max(SWATH_MIN_PX, Math.min(SWATH_MAX_PX, (parseFloat(data.cutting_width_m) || 0.18) * SWATH_FACTOR * proj.scale));
         var out = [];
-        out.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" style="background:#101412;border-radius:6px;">');
+        out.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" style="background:#101412;border-radius:6px;' + (opts.compact ? 'max-height:260px;' : '') + '">');
 
         // Zones à tondre : intérieur vert, contour rouge ; trous (îlots) en clair.
         var clip = '';
@@ -289,9 +309,15 @@ if (typeof $ !== 'undefined' && typeof document !== 'undefined' && $('#maptab').
             return Math.round(sec / 3600) + ' h';
         }
 
+        var idTries = 0;
         function load() {
             var id = eqId();
-            if (!id) { return; }
+            if (!id) {
+                // Après F5, la fiche de l'équipement se remplit en différé : on réessaie un moment.
+                if (idTries++ < 40) { setTimeout(function () { if ($('#maptab').is(':visible')) { load(); } }, 500); }
+                return;
+            }
+            idTries = 0;
             $.ajax({
                 type: 'POST',
                 url: AJAX,
@@ -318,19 +344,44 @@ if (typeof $ !== 'undefined' && typeof document !== 'undefined' && $('#maptab').
                 parts.push('{{Le démon est arrêté : la carte et la position ne sont pas mises à jour.}}');
                 warn = true;
             }
+            var md = d.map_diag || {};
             if (!built.info.hasMap) {
-                parts.push('{{Aucune carte reçue. Elle est téléchargée par le démon dans les secondes qui suivent son démarrage (puis toutes les 30 minutes).}}');
+                parts.push('{{Aucune carte reçue. Elle est téléchargée par le démon dans les secondes qui suivent son démarrage (puis toutes les 30 minutes) : redémarrez le démon après une mise à jour du plugin.}}');
                 warn = true;
+                parts.push(d.map_status
+                    ? ('{{diagnostic du démon}} : ' + $('<div>').text(d.map_status).html() + (d.map_status_ts ? ' ({{il y a}} ' + ago(d.now - d.map_status_ts) + ')' : ''))
+                    : '{{le démon n\'a transmis aucun diagnostic de carte : il n\'a probablement pas été redémarré depuis la mise à jour}}');
             } else {
                 parts.push(built.info.zones + ' {{zone(s)}}, ' + built.info.exclusions + ' {{exclusion(s)}}');
                 if (d.map_fetched_at) { parts.push('{{carte reçue il y a}} ' + ago(d.now - d.map_fetched_at)); }
+                if (built.info.zones === 0) {
+                    // Carte reçue mais sans zone exploitable : on affiche sa structure (sans coordonnées).
+                    parts.push('{{la carte reçue ne contient aucune zone reconnue}} — {{clés}} : ' +
+                        $('<div>').text((md.keys || []).join(', ') || '{{aucune}}').html() +
+                        ' ; {{couches}} : ' + $('<div>').text(JSON.stringify(md.layers || {})).html());
+                    warn = true;
+                }
+            }
+            if (md.source) {
+                parts.push('{{stockage}} : ' + (md.source === 'file' ? '{{fichier}}' : '{{cache Jeedom}}') + ' (' + Math.round((md.bytes || 0) / 1024) + ' {{Ko}})');
             }
             if (d.pos) {
                 parts.push('{{robot}} : ' + (d.pos.status ? $('<div>').text(d.pos.status).html() : '?') + ' ({{position il y a}} ' + ago(d.now - d.pos.ts) + ')');
             } else {
                 parts.push('{{position du robot inconnue}}');
             }
-            parts.push('{{trace du jour}} : ' + built.info.trailPoints + ' {{points}}');
+            var td = d.trail_diag || {};
+            var trailTxt = '{{trace de la dernière tonte}} : ' + built.info.trailPoints + ' {{points affichés}}';
+            if (td.stored !== undefined) {
+                trailTxt += ' / ' + td.stored + ' {{enregistrés}}';
+                if (td.stored === 0 && !td.error) {
+                    trailTxt += ' ({{la trace se construit à partir des positions reçues : elle apparaît après quelques déplacements du robot ; rien n\'est repris avant le démarrage du démon}})';
+                } else if (td.stored > 0 && built.info.trailPoints === 0) {
+                    trailTxt += ' ({{points enregistrés mais hors de la carte ou trop espacés pour être tracés}})';
+                }
+                if (td.error) { trailTxt += ' — {{erreur}} : ' + $('<div>').text(td.error).html(); warn = true; }
+            }
+            parts.push(trailTxt);
             $('#lrtk_map_status')
                 .removeClass('alert-info alert-warning alert-danger')
                 .addClass(warn ? 'alert-warning' : 'alert-info')
@@ -352,9 +403,39 @@ if (typeof $ !== 'undefined' && typeof document !== 'undefined' && $('#maptab').
         $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
             if ($(e.target).attr('href') === '#maptab') { start(); } else { stop(); }
         });
+        // Après F5, l'onglet peut être déjà affiché avant que ce script soit prêt
+        // (l'événement « shown » est alors passé) : on vérifie nous-mêmes.
+        function startIfVisible() { if ($('#maptab').is(':visible') && !timer) { start(); } }
+        setTimeout(startIfVisible, 300);
+        setTimeout(startIfVisible, 1500);
         $('#bt_lrtkMapRefresh').off('click').on('click', function () { load(); });
         $('#cb_lrtkMapAuto').off('change').on('change', function () {
             if ($('#maptab').is(':visible')) { start(); }
+        });
+
+        $('#bt_lrtkMapPng').off('click').on('click', function () {
+            var id = eqId();
+            if (!id) { return; }
+            $.ajax({
+                type: 'POST',
+                url: AJAX,
+                data: {action: 'saveMapPng', id: id, apikey: LandroidRTKApikey},
+                dataType: 'json',
+                error: handleAjaxError,
+                success: function (res) {
+                    var $box = $('#lrtk_diag_result');
+                    if (res.state != 'ok' || !res.result || !res.result.success) {
+                        var msg = (res.result && res.result.message) ? res.result.message : '{{Échec (voir les logs LandroidRTK).}}';
+                        $box.removeClass('alert-success').addClass('alert-danger').text('{{Image non créée}} : ' + msg).show();
+                        return;
+                    }
+                    var link = AJAX + '?action=downloadMapPng&id=' + encodeURIComponent(id);
+                    $box.removeClass('alert-danger').addClass('alert-success').empty()
+                        .append($('<div>').text('{{Image créée}} : ' + res.result.file))
+                        .append($('<a class="btn btn-sm btn-default" style="margin-top:6px;">').attr('href', link).html('<i class="fas fa-download"></i> {{Télécharger}}'))
+                        .show();
+                }
+            });
         });
 
         $('#bt_lrtkDiag').off('click').on('click', function () {

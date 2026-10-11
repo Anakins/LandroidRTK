@@ -97,6 +97,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
                                 <div class="col-sm-6">
                                     <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isEnable" checked>{{Activer}}</label>
                                     <label class="checkbox-inline"><input type="checkbox" class="eqLogicAttr" data-l1key="isVisible" checked>{{Visible}}</label>
+                                    <label class="checkbox-inline" title="{{Cache la vignette de la carte (position du robot, rafraîchie toutes les 30 s) dans le widget}}"><input type="checkbox" class="eqLogicAttr" data-l1key="configuration" data-l2key="hideMapWidget">{{Masquer la carte du widget}}</label>
                                 </div>
                             </div>
                         </div>

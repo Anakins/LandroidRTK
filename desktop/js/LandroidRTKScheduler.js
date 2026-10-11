@@ -165,6 +165,7 @@ function LandroidRTKScheduler_addNotificationRow(_notif) {
     $tr.find('.notif_html').prop('checked', _notif.html == '1');
     $tr.find('.notif_no_mow').prop('checked', _notif.notify_no_mow != '0');
     $tr.find('.notif_error').prop('checked', _notif.notify_error == '1');
+    $tr.find('.notif_mow_end').prop('checked', _notif.notify_mow_end == '1');
     $('#table_notifications tbody').append($tr);
     LandroidRTKScheduler_refreshPreview($tr.find('.notif_cmd_id'));
 }
@@ -418,6 +419,7 @@ function LandroidRTKScheduler_buildConfig() {
             html: $tr.find('.notif_html').is(':checked') ? '1' : '0',
             notify_no_mow: $tr.find('.notif_no_mow').is(':checked') ? '1' : '0',
             notify_error: $tr.find('.notif_error').is(':checked') ? '1' : '0',
+            notify_mow_end: $tr.find('.notif_mow_end').is(':checked') ? '1' : '0',
         });
     });
 

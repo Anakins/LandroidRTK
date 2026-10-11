@@ -698,7 +698,7 @@ class LandroidRTKScheduler {
     /* Notifications                                                    */
     /* ---------------------------------------------------------------- */
 
-    public static function sendNotifications($config, $title, $message_html, $message_plain, $type = 'default') {
+    public static function sendNotifications($config, $title, $message_html, $message_plain, $type = 'default', $files = array()) {
         if (empty($config['notifications']) || !is_array($config['notifications'])) {
             return;
         }
@@ -719,6 +719,10 @@ class LandroidRTKScheduler {
             if ($type == 'error' && (!isset($notif['notify_error']) || $notif['notify_error'] != '1')) {
                 continue;
             }
+            // Fin de tonte (carte en image) : option à cocher, désactivée par défaut.
+            if ($type == 'mow_end' && (!isset($notif['notify_mow_end']) || $notif['notify_mow_end'] != '1')) {
+                continue;
+            }
             $cmd = self::resolveCmd($notif['cmd_id']);
             if (!is_object($cmd)) {
                 continue;
@@ -727,7 +731,11 @@ class LandroidRTKScheduler {
             $final_title = !empty($notif['title']) ? $notif['title'] : $title;
             $final_message = $use_html ? $message_html : $message_plain;
             try {
-                $cmd->execCmd(array('title' => $final_title, 'message' => $final_message));
+                $options = array('title' => $final_title, 'message' => $final_message);
+                if ($files) {
+                    $options['files'] = $files;
+                }
+                $cmd->execCmd($options);
             } catch (\Throwable $e) {
                 log::add('LandroidRTK', 'error', 'Scheduler: échec envoi notification cmd ' . $notif['cmd_id'] . ' : ' . $e->getMessage());
             }
@@ -802,6 +810,9 @@ class LandroidRTKScheduler {
             // tonte estimée" (= la marge). Sert à détecter une pluie
             // pendant une tonte en cours (voir rain_interrupt_until).
             'current_mow_started_at' => null,
+            // Heure de départ de la dernière tonte lancée, tant que la
+            // notification de fin de tonte n'a pas été traitée.
+            'mow_end_pending' => null,
             // Si une pluie interrompt une tonte en cours : timestamp
             // avant lequel on ignore le critère d'humidité même s'il
             // redevient favorable (le temps que le sol absorbe la pluie).
@@ -947,6 +958,8 @@ class LandroidRTKScheduler {
      * d'ensemble complète de ce qui bloque (ou non) le démarrage.
      */
     public static function getConditionsStatus($eqLogic, $config) {
+        self::checkMowEnd($eqLogic, $config);
+
         $state = self::getState($eqLogic);
         $now = time();
         $today = date('Y-m-d', $now);
@@ -1098,6 +1111,69 @@ class LandroidRTKScheduler {
         return array('rows' => $rows, 'all_ok' => $all_ok);
     }
 
+    // Marge ajoutée à la durée de tonte paramétrée avant d'envoyer la
+    // notification de fin de tonte (carte en image).
+    const MOW_END_MARGIN_MIN = 30;
+
+    // Notification « fin de tonte » : seulement les jours où le planificateur
+    // a réellement lancé une tonte. Envoyée une seule fois, à
+    // départ + durée de tonte paramétrée + 30 min, avec la carte en PNG si
+    // elle a pu être dessinée (sinon texte seul).
+    public static function checkMowEnd($eqLogic, $config) {
+        try {
+            $state = self::getState($eqLogic);
+            if (empty($state['mow_end_pending'])) {
+                return;
+            }
+            $started = intval($state['mow_end_pending']);
+            $now = time();
+            $duration = max(60, intval($config['mow_duration_minutes']) * 60);
+            if ($now < $started + $duration + self::MOW_END_MARGIN_MIN * 60) {
+                return;
+            }
+            $state['mow_end_pending'] = null;
+            self::saveState($eqLogic, $state);
+
+            // Même récapitulatif que la notification de départ : météo,
+            // température, humidité, batterie (valeurs actuelles).
+            $parts = array(
+                "🏁 La période de tonte paramétrée de {$eqLogic->getName()} vient de s'achever.",
+                "⏱️ Départ à " . date('H:i', $started) . ', durée de tonte ' . intval($config['mow_duration_minutes']) . ' min + ' . self::MOW_END_MARGIN_MIN . ' min de marge.',
+            );
+            if (!empty($config['condition_id_cmd_id'])) {
+                $condition_id = self::getCmdValue($config['condition_id_cmd_id']);
+                $parts[] = self::getEmoji($condition_id) . ' ' . self::getConditionLabel($config);
+            }
+            if (!empty($config['temperature_cmd_id'])) {
+                $temp_val = self::getTemperatureValue($config);
+                if ($temp_val !== null && $temp_val !== '') {
+                    $parts[] = "🌡️ La température est de {$temp_val}°C.";
+                }
+            }
+            if (!empty($config['humidity_cmd_id'])) {
+                $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
+                if ($humidity_val !== null && $humidity_val !== '') {
+                    $parts[] = "💧 L'humidité est de {$humidity_val}%.";
+                }
+            }
+            $battery_val = self::getBatteryValue($eqLogic);
+            if (is_numeric($battery_val)) {
+                $parts[] = "🔋 Batterie : {$battery_val}%.";
+            }
+            $msg = self::buildDualMessage($parts);
+            $files = array();
+            $png = $eqLogic->saveMapPng();
+            if ($png['ok']) {
+                $files[] = $png['path'];
+            } else {
+                log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): carte non jointe à la notification de fin de tonte (' . $png['reason'] . '), texte seul.');
+            }
+            self::sendNotifications($config, strtoupper($eqLogic->getName()) . ' - FIN DE TONTE', $msg['html'], $msg['plain'], 'mow_end', $files);
+        } catch (\Throwable $e) {
+            log::add('LandroidRTK', 'error', 'Scheduler: notification de fin de tonte : ' . get_class($e) . ': ' . $e->getMessage());
+        }
+    }
+
     public static function evaluate($eqLogic) {
         $config = self::getConfig($eqLogic);
         self::syncWidgetCommands($eqLogic); // garde le widget à jour même si désactivé
@@ -1185,6 +1261,7 @@ class LandroidRTKScheduler {
                 $state['last_mow_date'] = null;
                 $state['rain_interrupt_until'] = $now + (intval($config['rain_interrupt_minutes']) * 60);
                 $state['current_mow_started_at'] = null;
+                $state['mow_end_pending'] = null;
                 $interrupted = true;
             }
             if ($state['last_notification_reason'] != 'rain' || $state['last_notification_date'] != $today) {
@@ -1385,6 +1462,7 @@ class LandroidRTKScheduler {
 
         $state['last_mow_date'] = $today;
         $state['current_mow_started_at'] = $now;
+        $state['mow_end_pending'] = $now;
         $state['last_notification_reason'] = null;
         self::saveState($eqLogic, $state);
 

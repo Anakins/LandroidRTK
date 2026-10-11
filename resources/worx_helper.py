@@ -326,7 +326,6 @@ def device_status(device):
         # le bouton « Exporter les données de diagnostic » (onglet Carte).
         "status_id": status_id,
         "error_id": error_id,
-        "wifi_rssi": worx_map.rssi_value(device),
         "rtk_pos": worx_map.rtk_position(device),
         "rtk_heading": worx_map.rtk_heading(device),
         "rtk_map_id": worx_map.rtk_map_id(device),

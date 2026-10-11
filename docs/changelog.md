@@ -1,5 +1,64 @@
 # Changelog
 
+## 1.7.0 (2026-10-11)
+- **Notification de fin de tonte avec la carte en image** : nouvelle case « Reçoit "fin de tonte" (carte envoyée au format PNG) » dans les notifications du planificateur (désactivée par défaut). Le message reprend le récapitulatif habituel avec émojis (🏁 fin, ⏱️ horaires, météo, 🌡️ température, 💧 humidité, 🔋 batterie). Elle est envoyée une seule fois, les jours où le planificateur a lancé une tonte, à l'heure de départ + durée de tonte paramétrée + 30 min. L'image PNG est dessinée par PHP (extension GD, déjà requise par Jeedom) et jointe via l'option `files` de la commande de notification. Si l'image ne peut pas être créée, seul le texte est envoyé (raison dans les logs).
+- **Trace par tonte** : la trace n'est plus remise à zéro chaque jour mais à chaque nouvelle tonte (robot en mouvement après au moins 4 h sans point). L'image PNG de la dernière tonte est conservée jusque-là.
+- **Trace plus large** : les traits de tonte sont deux fois plus épais (widget, onglet Carte et image PNG), pour supprimer l'effet « zèbre » sur les bords.
+- Onglet Carte : bouton « Enregistrer l'image (PNG) » pour créer et télécharger l'image à la demande.
+
+## 1.6.4 (2026-10-11)
+- Widget : les informations du haut sont alignées en haut de leur colonne (au lieu d'être centrées verticalement).
+- Aide du plugin (`docs/fr_FR/index.md`) : ajout d'une courte section « Carte ».
+
+## 1.6.3 (2026-10-11)
+- **Bug corrigé (widget : la carte restait en bas, toujours)** : la structure réelle du widget Jeedom 4.x sépare les commandes par des `<div class="break"></div>` (et non des `<br/>`) dans une zone `div.cmds` ; le plugin ne reconnaissait donc jamais les informations du haut et se rabattait systématiquement sur « carte en bas ». Corrigé, et validé cette fois sur un widget fabriqué à partir des gabarits et des feuilles de style du cœur de Jeedom (rendu vérifié en petit widget, en très grand widget et avec l'option de centrage vertical).
+- **Grand widget** : le tableau deux colonnes occupe toute la largeur de la zone des commandes (au lieu de se réduire à son contenu et de rester au milieu) ; les informations sont centrées dans la colonne de gauche, la carte dans celle de droite.
+
+## 1.6.2 (2026-10-11)
+- **Widget en deux colonnes** : les informations du haut (Dernière synchro … Pluie détectée) sont regroupées dans la colonne de gauche d'un tableau, et la mini carte occupe la colonne de droite. Le reste du widget (boutons, mode festif, programmation et ses valeurs centrées, curseurs) reste dessous, inchangé, ce qui raccourcit nettement le widget. Tant que la carte n'est pas disponible, la colonne de droite n'existe pas et les informations gardent toute la largeur.
+- **Taille du widget** : à la première apparition (ou disparition) de la carte, le plugin demande à Jeedom de recalculer la taille et la position du widget (`jeedomUtils.positionEqLogic`), puis ne le refait plus aux rafraîchissements de 30 s pour ne pas faire bouger le dashboard.
+- Sécurité de la mise en page : le tableau n'est construit que si les 14 informations sont retrouvées d'un seul tenant dans le widget ; si l'ordre des commandes a été modifié ou si le HTML est inattendu, la carte est simplement ajoutée en bas, et dans tous les cas le contenu d'origine du widget n'est jamais altéré (vérifié par test : en retirant le tableau, le widget est strictement identique à celui de Jeedom).
+- Bug corrigé : l'insertion de repli (carte en bas) pouvait s'arrêter au mauvais endroit quand le widget contient plusieurs scripts.
+
+## 1.6.1 (2026-10-11)
+- **Bug corrigé (widget : ligne vide en haut et bouton « Rafraîchir » disparu)** : la vignette était insérée tout en haut du widget, ce qui décalait l'en-tête du widget par défaut (et masquait son bouton « Rafraîchir »). Elle est maintenant insérée **en fin de widget**, juste avant la fermeture du bloc principal : l'en-tête et le reste du widget par défaut sont strictement identiques à ceux de Jeedom (vérifié par test). Le conteneur n'occupe plus aucune place (ni marge) tant que l'image n'est pas chargée.
+- **Bug corrigé (erreur 401 sur `core/php/LandroidRTKMap.php`)** : la session Jeedom n'était pas démarrée par ce point d'accès, donc l'utilisateur était vu comme non connecté. Il charge désormais l'authentification du cœur de Jeedom (comme les autres pages de plugin).
+
+## 1.6.0 (2026-10-11)
+- **Retrait de la barre d'état (batterie + WiFi) et du signal WiFi** : la barre en haut du widget, la commande « Signal WiFi » et toute la logique de lecture du WiFi sont supprimés. La commande « Batterie » du plugin est inchangée. La commande « Signal WiFi » créée par les versions 1.4.x est **supprimée automatiquement** à la mise à jour.
+- **Carte dans le widget, refaite sans JavaScript** : la vignette (recadrée sur le jardin, rafraîchie toutes les 30 s) est maintenant une **simple image** dessinée par Jeedom (`core/php/LandroidRTKMap.php`) et placée en haut du widget. Elle ne dépend plus d'aucun script dans la page du dashboard (qui pouvait ne pas être exécuté selon la version de Jeedom, d'où une vignette absente). Elle se recharge d'elle-même (attributs `onload` / `onerror` de l'image), se cache tant qu'aucune carte n'est disponible, et s'arrête si le widget est retiré de la page. Option **« Masquer la carte du widget »** conservée.
+- Le dessin serveur reproduit exactement le rendu de l'onglet Carte (vérifié par comparaison automatique des deux rendus).
+- Accès : l'image n'est servie qu'à un utilisateur connecté ayant le droit de voir l'équipement ; aucune clé d'API dans le widget.
+- Nettoyage : l'action ajax `getMapWidget`, le script du widget et le mode incrémental de `getMapData` (ajoutés en 1.5.0) sont supprimés. Aucun changement du planificateur, des libellés de statut (stations) ni des erreurs.
+
+## 1.5.1 (2026-10-11)
+- **Bug corrigé (onglet Carte, « Chargement de la carte… » après F5)** : après un rechargement de la page, l'identifiant de l'équipement n'est pas encore connu quand l'onglet s'affiche, et l'événement d'affichage de l'onglet est déjà passé : rien ne se chargeait avant un clic sur « Rafraîchir ». Le chargement réessaie maintenant jusqu'à ce que l'équipement soit connu, et démarre aussi si l'onglet est déjà visible.
+- **Bug corrigé (vignette absente du widget)** : si Jeedom insère le widget dans la page en deux temps, le premier rafraîchissement trouvait le conteneur absent et arrêtait définitivement la mise à jour. Le premier chargement est maintenant différé (0,7 s puis 3 s) et le minuteur ne s'arrête qu'après plusieurs absences consécutives. Si la carte ne peut pas s'afficher, une courte ligne grise en donne la raison (accès refusé, serveur injoignable, carte pas encore reçue) au lieu de ne rien montrer.
+- **Diagnostic (« Signal WiFi : inconnu »)** : le message unique écrit dans les logs quand aucun signal WiFi n'est trouvé indique maintenant aussi les **valeurs** candidates rejetées (une puissance de signal n'est pas une donnée personnelle ; aucune coordonnée), pour voir si le robot envoie une valeur dans un format inattendu.
+
+## 1.5.0 (2026-10-11)
+- **Nouveauté (carte dans le widget)** : une vignette de la carte s'affiche sous la barre batterie/WiFi du widget Dashboard et mobile. Elle est **recadrée sur le jardin** (zones et station, avec une petite marge) et fait environ la moitié de la grande carte de l'onglet. Position et cap du robot ainsi que la trace du jour sont **rafraîchis toutes les 30 s** (pause quand l'onglet du navigateur est caché). Rien n'est affiché tant qu'aucune carte n'a été reçue.
+- Économie de bande passante : la géométrie du jardin n'est retéléchargée que si elle a changé, la trace est transmise en incrémental (seulement les nouveaux points).
+- Nouvelle option d'équipement **« Masquer la carte du widget »** (page de configuration de l'équipement) ; décochée par défaut.
+- Sécurité : la vignette utilise une action ajax en lecture seule (`getMapWidget`) réservée aux utilisateurs connectés ayant le droit de voir l'équipement ; la clé d'API du plugin n'est jamais placée dans le widget.
+- Aucun changement du comportement existant (stations, erreurs, planification) : le planificateur est strictement identique.
+
+## 1.4.4 (2026-10-11)
+- **Amélioration (diagnostic de la trace)** : l'onglet Carte affiche maintenant « trace du jour : N points affichés / M enregistrés » avec une explication. La trace se construit à partir des positions reçues **depuis le (re)démarrage du démon** (le cloud Worx ne fournit aucun historique) ; elle reste donc vide les premières minutes de tonte, et il faut au moins 2 points pour tracer un segment. Si l'enregistrement échoue (droits d'écriture sur le dossier temporaire de Jeedom), l'erreur est signalée dans l'onglet (« écriture impossible … ») sans coordonnée, et effacée dès que l'écriture refonctionne.
+
+## 1.4.3 (2026-10-11)
+- **Amélioration (diagnostic de la carte)** : quand l'onglet Carte affiche « Aucune carte reçue », il indique maintenant **pourquoi** (ligne « diagnostic du démon ») : identifiant de carte absent de la configuration du robot (avec les noms des clés présentes), téléchargement refusé par le service Worx (code HTTP ou type d'erreur), ou envoi à Jeedom refusé. Jusque-là ces échecs étaient silencieux. La cause est aussi écrite **une seule fois** dans les logs LandroidRTK. Aucune coordonnée ni jeton n'apparaît dans ces messages.
+- Un démon non redémarré depuis la mise à jour est reconnu (aucun diagnostic reçu) et signalé comme tel dans l'onglet.
+- Le téléchargement de la carte réessaie toutes les 5 minutes après un échec (toutes les 30 minutes après un succès), et immédiatement si l'identifiant de carte change.
+
+## 1.4.2 (2026-10-11)
+- **Bug corrigé (« Signal WiFi : inconnu »)** : le signal WiFi n'était lu que dans un seul champ de la télémétrie (`rsi`), absent sur certains modèles/micrologiciels. Il est désormais recherché dans l'ordre : `rssi`/`rsi` de la télémétrie, bloc `wifi.rsi` du robot, puis WiFi de l'appareil auquel le robot est relié (module NearLink, par exemple la station). Les valeurs invalides (0, positives, hors plage) sont ignorées au profit de la source suivante.
+- **Amélioration (diagnostic)** : si aucune source ne fournit de valeur, le démon écrit **une seule fois** dans les logs la liste des **noms** de clés de télémétrie reçues (jamais leurs valeurs, aucune coordonnée), pour identifier où se trouve le signal sur ce modèle. Rappel : le démon doit être redémarré après une mise à jour du plugin pour que la nouvelle commande « Signal WiFi » reçoive des valeurs.
+
+## 1.4.1 (2026-10-11)
+- **Bug corrigé (onglet Carte vide)** : la carte RTK était conservée dans le cache de Jeedom, ce qui pouvait la perdre ou la tronquer selon sa taille et le moteur de cache, et laissait l'onglet vide. Elle est désormais enregistrée **dans un fichier du dossier du plugin** (`data/map/`, comme un plugin caméra le fait pour ses images), avec écriture atomique, et à défaut de droits d'écriture dans le dossier temporaire de Jeedom (le cache n'est plus qu'un dernier recours). Testé avec une carte de plus de 1 Mo.
+- **Amélioration (diagnostic)** : quand la carte est absente ou ne contient aucune zone reconnue, l'onglet Carte indique précisément pourquoi : rappel de redémarrer le démon après une mise à jour, lieu et taille du stockage, et, si la carte est reçue mais vide, sa structure (noms des clés et nombre d'éléments par couche, sans aucune coordonnée).
+
 ## 1.4.0 (2026-10-11)
 - **Nouveau : barre d'état en haut du widget** (dashboard et mobile) : niveau de batterie (jauge, pourcentage, éclair pendant la charge) et force du signal WiFi (4 barres + dBm), avec couleurs vert/orange/rouge. Mise à jour en direct sans recharger la page, en se greffant sur le mécanisme natif de Jeedom sans remplacer le gestionnaire du widget par défaut. En cas de moindre problème, le widget par défaut s'affiche inchangé.
 - **Nouvelle commande « Signal WiFi »** (`wifi_rssi`, en dBm), masquée sur le widget (représentée par les barres). Créée automatiquement sur les équipements existants à la mise à jour du plugin — sans relancer « Synchroniser » et **sans modifier aucune commande déjà présente**.

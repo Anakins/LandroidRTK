@@ -298,10 +298,11 @@ if (!isConnect()) {
             <ul style="margin:0 0 10px 15px; padding:0; font-size:0.9em; color:#666;">
                 <li><b>Reçoit "pas de tonte"</b> : envoyée en fin de journée si la tonte n'a pas pu avoir lieu.</li>
                 <li><b>Reçoit "erreur robot"</b> : envoyée si le robot signale une erreur.</li>
+                <li><b>Reçoit "fin de tonte"</b> (carte envoyée au format PNG) : envoyée à la fin de la période de tonte paramétrée, les jours de tonte seulement.</li>
             </ul>
             <table class="table table-condensed" id="table_notifications">
                 <thead>
-                    <tr><th style="width:25%;">Commande</th><th style="width:18%;">Titre</th><th style="width:11%;">HTML (&lt;br/&gt;)</th><th style="width:18%;">Reçoit "pas de tonte"</th><th style="width:18%;">Reçoit "erreur robot"</th><th></th></tr>
+                    <tr><th style="width:22%;">Commande</th><th style="width:15%;">Titre</th><th style="width:10%;">HTML (&lt;br/&gt;)</th><th style="width:14%;">Reçoit "pas de tonte"</th><th style="width:14%;">Reçoit "erreur robot"</th><th style="width:15%;">Reçoit "fin de tonte" (carte envoyée au format PNG)</th><th></th></tr>
                 </thead>
                 <tbody></tbody>
             </table>
@@ -330,6 +331,7 @@ if (!isConnect()) {
         <td style="text-align:center;"><input type="checkbox" class="notif_html"></td>
         <td style="text-align:center;"><input type="checkbox" class="notif_no_mow" checked></td>
         <td style="text-align:center;"><input type="checkbox" class="notif_error"></td>
+        <td style="text-align:center;"><input type="checkbox" class="notif_mow_end"></td>
         <td>
             <a class="btn btn-default btn-xs bt_testNotifRow"><i class="fas fa-paper-plane"></i></a>
             <a class="btn btn-danger btn-xs bt_removeRow"><i class="fas fa-trash"></i></a>

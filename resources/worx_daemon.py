@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -73,12 +74,13 @@ def push_to_jeedom(serial, data, error_message=None):
 def push_map_to_jeedom(serial, map_id, map_data):
     """Envoie la géométrie de la carte RTK à Jeedom (action ajax daemonMap).
 
-    Aucune coordonnée n'est écrite dans les journaux, ni ici ni côté PHP.
+    Retourne (ok, raison). Aucune coordonnée n'est écrite dans les journaux,
+    ni ici ni côté PHP.
     """
     ajax_url = os.environ.get("LANDROIDRTK_AJAX_URL")
     secret = os.environ.get("LANDROIDRTK_DAEMON_SECRET")
     if not ajax_url or not secret:
-        return False
+        return False, "variables LANDROIDRTK_AJAX_URL / LANDROIDRTK_DAEMON_SECRET absentes"
     body = urllib.parse.urlencode({
         "action": "daemonMap",
         "secret": secret,
@@ -90,10 +92,13 @@ def push_map_to_jeedom(serial, map_id, map_data):
         req = urllib.request.Request(ajax_url, data=body, method="POST")
         with urllib.request.urlopen(req, timeout=15) as resp:
             resp.read()
-        return True
+        return True, None
+    except urllib.error.HTTPError as exc:
+        logger.error(f"Échec push de la carte vers Jeedom pour {serial}: HTTP {exc.code}")
+        return False, f"Jeedom a refusé la carte (HTTP {exc.code}, voir le log LandroidRTK)"
     except Exception as exc:
         logger.error(f"Échec push de la carte vers Jeedom pour {serial}: {exc}")
-        return False
+        return False, f"envoi à Jeedom impossible ({type(exc).__name__})"
 
 
 def push_log_to_jeedom(message):
@@ -128,6 +133,8 @@ async def main():
 
     last_error = {}
     map_state = {}  # serial -> {"map_id", "next_try"}
+    map_status = {}  # serial -> texte de diagnostic affiché dans l'onglet Carte
+    map_status_logged = {}  # serial -> dernier échec déjà écrit dans le log Jeedom
     was_disconnected = False
     last_disconnect_log_time = 0
     disconnect_since = None
@@ -164,25 +171,42 @@ async def main():
                             error_message = f"{data['name']} signale une erreur : {data['error_label']}"
                         last_error[serial] = data["error_label"] if data["error_active"] else None
 
+                        data["map_status"] = map_status.get(serial)
                         push_to_jeedom(serial, data, error_message)
 
                         # Carte RTK : à la première connexion, quand son
                         # identifiant change, puis au plus toutes les 30 min.
-                        # Un échec n'a jamais d'incidence sur le reste.
+                        # Un échec n'a jamais d'incidence sur le reste : sa
+                        # cause est transmise à Jeedom (onglet Carte) et
+                        # écrite UNE fois dans les logs.
                         try:
                             map_id = data.get("rtk_map_id")
-                            state = map_state.get(serial)
-                            if map_id and (
-                                state is None
-                                or state["map_id"] != map_id
-                                or time.time() >= state["next_try"]
-                            ):
-                                map_data = await worx_map.fetch_rtk_map(cloud, map_id)
-                                if map_data is not None and push_map_to_jeedom(serial, map_id, map_data):
-                                    map_state[serial] = {"map_id": map_id, "next_try": time.time() + MAP_REFRESH_INTERVAL}
-                                else:
-                                    map_state[serial] = {"map_id": map_id, "next_try": time.time() + MAP_RETRY_INTERVAL}
+                            if not map_id:
+                                status = "identifiant de carte absent de la configuration du robot : " + worx_map.cfg_debug_keys(device)
+                            else:
+                                state = map_state.get(serial)
+                                status = map_status.get(serial) or "en attente du premier téléchargement"
+                                if (
+                                    state is None
+                                    or state["map_id"] != map_id
+                                    or time.time() >= state["next_try"]
+                                ):
+                                    map_data, reason = await worx_map.fetch_rtk_map_status(cloud, map_id)
+                                    ok = False
+                                    if map_data is not None:
+                                        ok, reason = push_map_to_jeedom(serial, map_id, map_data)
+                                    if ok:
+                                        status = "carte téléchargée et transmise à Jeedom"
+                                        map_state[serial] = {"map_id": map_id, "next_try": time.time() + MAP_REFRESH_INTERVAL}
+                                    else:
+                                        status = "échec : " + str(reason)
+                                        map_state[serial] = {"map_id": map_id, "next_try": time.time() + MAP_RETRY_INTERVAL}
+                            map_status[serial] = status
+                            if status.startswith(("échec", "identifiant")) and map_status_logged.get(serial) != status:
+                                map_status_logged[serial] = status
+                                push_log_to_jeedom("Carte RTK : " + status)
                         except Exception as exc:
+                            map_status[serial] = f"erreur inattendue ({type(exc).__name__})"
                             logger.error(f"Carte RTK ({serial}) : {type(exc).__name__}")
 
                     await asyncio.sleep(POLL_INTERVAL)

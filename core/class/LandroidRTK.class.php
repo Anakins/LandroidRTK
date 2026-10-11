@@ -2,6 +2,8 @@
 
 require_once dirname(__FILE__) . '/LandroidRTKCmd.class.php';
 require_once dirname(__FILE__) . '/LandroidRTKScheduler.class.php';
+require_once dirname(__FILE__) . '/LandroidRTKMapSvg.class.php';
+require_once dirname(__FILE__) . '/LandroidRTKMapPng.class.php';
 
 class LandroidRTK extends eqLogic {
 
@@ -66,9 +68,6 @@ class LandroidRTK extends eqLogic {
         array('logicalId' => 'rain_delay',    'name' => 'Délai pluie',      'type' => 'numeric', 'unite' => 'h', 'order' => 12),
         array('logicalId' => 'rain_detected', 'name' => 'Pluie détectée',   'type' => 'string',  'unite' => '',  'order' => 13),
         array('logicalId' => 'party_mode',    'name' => 'Mode festif',      'type' => 'string',  'unite' => '',  'order' => 18),
-        // Signal WiFi (dBm). Masquée par défaut sur le widget : elle est
-        // affichée sous forme de barres dans la barre d'état du haut.
-        array('logicalId' => 'wifi_rssi',     'name' => 'Signal WiFi',      'type' => 'numeric', 'unite' => 'dBm', 'order' => 20, 'visible' => 0),
     );
 
     /*
@@ -292,14 +291,9 @@ class LandroidRTK extends eqLogic {
      * Crée les commandes manquantes sur un eqLogic (jamais de doublon,
      * jamais de modification d'une commande déjà existante).
      */
-    public static function ensureCommands($eqLogic, $only_missing = false) {
+    public static function ensureCommands($eqLogic) {
         foreach (self::INFO_COMMANDS as $def) {
             $cmd = $eqLogic->getCmd(null, $def['logicalId']);
-            if (is_object($cmd) && $only_missing) {
-                // Mode "mise à jour du plugin" : on ne crée que ce qui
-                // manque, sans toucher à AUCUNE commande existante.
-                continue;
-            }
             if (is_object($cmd)) {
                 // Commande déjà existante : on ne touche à rien sauf
                 // l'ordre, la mise en forme (retour à la ligne) et le type
@@ -345,9 +339,6 @@ class LandroidRTK extends eqLogic {
             $cmd->setEqLogic_id($eqLogic->getId());
             $cmd->setOrder($def['order']);
             $cmd->setDisplay('forceReturnLineAfter', '1');
-            if (isset($def['visible'])) {
-                $cmd->setIsVisible(intval($def['visible']));
-            }
             $cmd->setTemplate('dashboard', 'core::default');
             $cmd->setTemplate('mobile', 'core::default');
             $cmd->save();
@@ -355,9 +346,6 @@ class LandroidRTK extends eqLogic {
 
         foreach (self::ACTION_COMMANDS as $def) {
             $cmd = $eqLogic->getCmd(null, $def['logicalId']);
-            if (is_object($cmd) && $only_missing) {
-                continue;
-            }
             if (is_object($cmd)) {
                 $needs_save = false;
                 if ($cmd->getOrder() != $def['order'] || $cmd->getDisplay('forceReturnLineAfter') != $def['lineBreak']) {
@@ -429,9 +417,6 @@ class LandroidRTK extends eqLogic {
         if (isset($data['party_mode_enabled']) && $data['party_mode_enabled'] !== null) {
             $this->checkAndUpdateCmd('party_mode', $data['party_mode_enabled'] ? 'Activé' : 'Désactivé');
         }
-        if (isset($data['wifi_rssi']) && is_numeric($data['wifi_rssi'])) {
-            $this->checkAndUpdateCmd('wifi_rssi', intval($data['wifi_rssi']));
-        }
         self::rememberRtkPosition($this, $data);
 
         if (!empty($data['error_active'])) {
@@ -492,160 +477,123 @@ class LandroidRTK extends eqLogic {
     }
 
     /* ---------------------------------------------------------------- */
-    /* Barre d'état du widget (batterie + WiFi)                          */
+    /* Vignette de carte dans le widget                                  */
     /* ---------------------------------------------------------------- */
 
-    /** Nombre de barres WiFi (0 à 4) pour un RSSI en dBm, null si inconnu. */
-    public static function wifiBars($rssi) {
-        if ($rssi === null || $rssi === '' || !is_numeric($rssi)) {
-            return null;
+    /**
+     * Vignette de la carte : une simple image <img> dessinée par le serveur
+     * (core/php/LandroidRTKMap.php), SANS balise <script> dans le widget.
+     * Elle se recharge toute seule toutes les 30 s grâce aux attributs
+     * onload/onerror de l'image, et reste invisible (aucune place prise)
+     * tant qu'aucune carte n'est disponible. $column = true : version
+     * « colonne de droite » du tableau du haut ; sinon bloc pleine largeur.
+     * Retourne '' si l'option « Masquer la carte » est cochée.
+     */
+    public function buildMapImageHtml($column = false) {
+        if (intval($this->getConfiguration('hideMapWidget', 0)) === 1) {
+            return '';
         }
-        $r = floatval($rssi);
-        if ($r >= 0) {
-            return null;
-        }
-        if ($r >= -55) {
-            return 4;
-        }
-        if ($r >= -65) {
-            return 3;
-        }
-        if ($r >= -75) {
-            return 2;
-        }
-        if ($r >= -85) {
-            return 1;
-        }
-        return 0;
-    }
-
-    /** Classe de couleur du signal WiFi : bon dès -65 dBm, moyen dès -75 dBm. */
-    public static function wifiClass($rssi) {
-        if ($rssi === null || $rssi === '' || !is_numeric($rssi) || floatval($rssi) >= 0) {
-            return 'lrtk-unk';
-        }
-        $r = floatval($rssi);
-        if ($r >= -65) {
-            return 'lrtk-good';
-        }
-        if ($r >= -75) {
-            return 'lrtk-warn';
-        }
-        return 'lrtk-bad';
-    }
-
-    /** Classe de couleur de la batterie : bonne dès 40 %, moyenne dès 20 %. */
-    public static function batteryClass($percent) {
-        if ($percent === null || $percent === '' || !is_numeric($percent)) {
-            return 'lrtk-unk';
-        }
-        $p = floatval($percent);
-        if ($p >= 40) {
-            return 'lrtk-good';
-        }
-        if ($p >= 20) {
-            return 'lrtk-warn';
-        }
-        return 'lrtk-bad';
-    }
-
-    private function cmdValueOrNull($logicalId) {
-        $cmd = $this->getCmd(null, $logicalId);
-        if (!is_object($cmd)) {
-            return array(null, 0);
-        }
-        $v = $cmd->execCmd();
-        if ($v === '' || $v === null) {
-            $v = null;
-        }
-        return array($v, intval($cmd->getId()));
-    }
-
-    /** Construit le HTML de la barre d'état (style + barre + script de mise à jour en direct). */
-    public function buildStatusBarHtml() {
-        list($battery, $battery_id) = $this->cmdValueOrNull('battery');
-        list($rssi, $wifi_id) = $this->cmdValueOrNull('wifi_rssi');
-        list($charging, $charging_id) = $this->cmdValueOrNull('charging');
-
-        $pct = is_numeric($battery) ? max(0, min(100, floatval($battery))) : null;
-        $bat_class = self::batteryClass($pct);
-        $bat_fill = $pct === null ? 0 : round(19 * $pct / 100, 1);
-        $bat_txt = $pct === null ? '—' : (intval(round($pct)) . '%');
-        $bat_title = $pct === null ? 'Batterie : inconnue' : ('Batterie : ' . intval(round($pct)) . ' %');
-        $is_charging = (is_string($charging) && $charging === 'Oui');
-
-        $bars = self::wifiBars($rssi);
-        $wifi_class = self::wifiClass($rssi);
-        $wifi_txt = $bars === null ? '' : (intval($rssi) . ' dBm');
-        $wifi_title = $bars === null ? 'Signal WiFi : inconnu' : ('Signal WiFi : ' . intval($rssi) . ' dBm');
-
-        $bar_svg = '';
-        $geoms = array(array(0, 8, 3, 4), array(5, 5.5, 3, 6.5), array(10, 3, 3, 9), array(15, 0, 3, 12));
-        foreach ($geoms as $i => $g) {
-            $off = ($bars === null || $i >= $bars) ? ' lrtk-off' : '';
-            $bar_svg .= '<rect class="lrtk-w' . ($i + 1) . $off . '" x="' . $g[0] . '" y="' . $g[1] . '" width="' . $g[2] . '" height="' . $g[3] . '" rx="0.8" fill="currentColor"/>';
-        }
-
         $id = intval($this->getId());
-        $css = '<style>'
-            . '.lrtk-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 8px;margin:0 0 3px 0;font-size:12px;line-height:16px;border-bottom:1px solid rgba(128,128,128,.25);}'
-            . '.lrtk-bar .lrtk-item{display:inline-flex;align-items:center;gap:4px;}'
-            . '.lrtk-bar .lrtk-ico{display:inline-flex;}'
-            . '.lrtk-bar .lrtk-good{color:#2fb344;}.lrtk-bar .lrtk-warn{color:#f59f00;}.lrtk-bar .lrtk-bad{color:#e03131;}.lrtk-bar .lrtk-unk{color:#868e96;}'
-            . '.lrtk-bar .lrtk-off{opacity:.25;}'
-            . '.lrtk-bar .lrtk-txt{opacity:.85;}'
-            . '.lrtk-bar .lrtk-bolt{display:' . ($is_charging ? 'inline' : 'none') . ';}'
-            . '</style>';
-
-        $html = $css
-            . '<div class="lrtk-bar" data-lrtk-eq="' . $id . '">'
-            . '<span class="lrtk-item lrtk-bat" title="' . htmlspecialchars($bat_title, ENT_QUOTES) . '">'
-            . '<span class="lrtk-ico ' . $bat_class . '"><svg viewBox="0 0 26 12" width="26" height="12" aria-hidden="true">'
-            . '<rect x="0.5" y="0.5" width="22" height="11" rx="2.5" fill="none" stroke="currentColor"/>'
-            . '<rect class="lrtk-bat-fill" x="2" y="2" width="' . $bat_fill . '" height="8" rx="1.2" fill="currentColor"/>'
-            . '<rect x="23.5" y="3.5" width="2" height="5" rx="1" fill="currentColor"/></svg></span>'
-            . '<span class="lrtk-txt lrtk-bat-txt">' . htmlspecialchars($bat_txt, ENT_QUOTES) . '</span>'
-            . '<span class="lrtk-bolt" title="En charge">⚡</span>'
-            . '</span>'
-            . '<span class="lrtk-item lrtk-wifi" title="' . htmlspecialchars($wifi_title, ENT_QUOTES) . '">'
-            . '<span class="lrtk-txt lrtk-wifi-txt">' . htmlspecialchars($wifi_txt, ENT_QUOTES) . '</span>'
-            . '<span class="lrtk-ico lrtk-wifi-ico ' . $wifi_class . '"><svg viewBox="0 0 18 12" width="18" height="12" aria-hidden="true">' . $bar_svg . '</svg></span>'
-            . '</span>'
-            . '</div>';
-
-        // Mise à jour en direct : on se greffe sur le mécanisme natif
-        // jeedom.cmd.update[id] SANS écraser le gestionnaire déjà posé par
-        // le widget par défaut (il est rappelé en premier).
-        $js = '<script>(function(){'
-            . 'try{if(typeof jeedom==="undefined"||!jeedom.cmd||!jeedom.cmd.update){return;}'
-            . 'var EQ=' . $id . ';'
-            . 'function bars(r){r=parseFloat(r);if(isNaN(r)||r>=0){return null;}return r>=-55?4:(r>=-65?3:(r>=-75?2:(r>=-85?1:0)));}'
-            . 'function wcls(r){r=parseFloat(r);if(isNaN(r)||r>=0){return "lrtk-unk";}return r>=-65?"lrtk-good":(r>=-75?"lrtk-warn":"lrtk-bad");}'
-            . 'function bcls(p){p=parseFloat(p);if(isNaN(p)){return "lrtk-unk";}return p>=40?"lrtk-good":(p>=20?"lrtk-warn":"lrtk-bad");}'
-            . 'function each(f){var els=document.querySelectorAll(\'.lrtk-bar[data-lrtk-eq="\'+EQ+\'"]\');for(var i=0;i<els.length;i++){f(els[i]);}}'
-            . 'function setBattery(v){each(function(b){var p=parseFloat(v);var ok=!isNaN(p);if(ok){p=Math.max(0,Math.min(100,p));}'
-            . 'b.querySelector(".lrtk-bat-fill").setAttribute("width",ok?(19*p/100).toFixed(1):0);'
-            . 'b.querySelector(".lrtk-bat-txt").textContent=ok?(Math.round(p)+"%"):"—";'
-            . 'b.querySelector(".lrtk-bat .lrtk-ico").className="lrtk-ico "+bcls(ok?p:null);'
-            . 'b.querySelector(".lrtk-bat").title=ok?("Batterie : "+Math.round(p)+" %"):"Batterie : inconnue";});}'
-            . 'function setWifi(v){each(function(b){var n=bars(v);var r=parseFloat(v);'
-            . 'for(var i=1;i<=4;i++){var e=b.querySelector(".lrtk-w"+i);if(e){e.setAttribute("class","lrtk-w"+i+((n===null||i>n)?" lrtk-off":""));}}'
-            . 'b.querySelector(".lrtk-wifi-ico").className="lrtk-ico lrtk-wifi-ico "+wcls(v);'
-            . 'b.querySelector(".lrtk-wifi-txt").textContent=n===null?"":(Math.round(r)+" dBm");'
-            . 'b.querySelector(".lrtk-wifi").title=n===null?"Signal WiFi : inconnu":("Signal WiFi : "+Math.round(r)+" dBm");});}'
-            . 'function setCharging(v){each(function(b){b.querySelector(".lrtk-bolt").style.display=(String(v)==="Oui")?"inline":"none";});}'
-            . 'function hook(id,fn){if(!id){return;}var prev=jeedom.cmd.update[id];if(prev&&prev.__lrtk){prev=prev.__prev;}'
-            . 'var w=function(o){if(typeof prev==="function"){try{prev(o);}catch(e){}}try{fn(o&&(o.display_value!==undefined?o.display_value:o.value));}catch(e){}};'
-            . 'w.__lrtk=true;w.__prev=prev;jeedom.cmd.update[id]=w;}'
-            . 'hook(' . $battery_id . ',setBattery);hook(' . $wifi_id . ',setWifi);hook(' . $charging_id . ',setCharging);'
-            . '}catch(e){}})();</script>';
-
-        return array('bar' => $html, 'script' => $js);
+        $url = 'plugins/LandroidRTK/core/php/LandroidRTKMap.php?id=' . $id;
+        // Rechargement : même adresse + horodatage ; arrêt si l'image n'est plus dans la page.
+        $reload = "var i=this;setTimeout(function(){if(document.body.contains(i)){i.src='" . $url . "&t='+Date.now();}},%d)";
+        // À la 1re apparition, on demande à Jeedom de recalculer la taille/position du widget
+        // (sa hauteur vient de changer) ; plus ensuite, pour ne pas faire bouger le dashboard toutes les 30 s.
+        $relayout = "try{jeedomUtils.positionEqLogic(" . $id . ")}catch(e){}";
+        $onload = "var m=this.parentNode,f=(m.style.display==='none');this.style.display='block';m.style.display='block';"
+            . sprintf($reload, 30000) . ";if(f){" . $relayout . "}";
+        $onerror = "var m=this.parentNode,f=(m.style.display!=='none');this.style.display='none';m.style.display='none';"
+            . sprintf($reload, 60000) . ";if(f){" . $relayout . "}";
+        $box_style = $column
+            ? 'display:none;flex:0 1 45%;min-width:0;text-align:center;line-height:0;align-self:center;'
+            : 'display:none;margin:4px 0 0 0;text-align:center;line-height:0;';
+        return '<div class="lrtk-map" style="' . $box_style . '">'
+            . '<img src="' . $url . '&t=' . time() . '" alt="" '
+            . 'style="display:none;max-width:100%;max-height:320px;width:auto;height:auto;border-radius:6px;" '
+            . 'onload="' . htmlspecialchars($onload, ENT_QUOTES) . '" '
+            . 'onerror="' . htmlspecialchars($onerror, ENT_QUOTES) . '"></div>';
     }
 
     /**
-     * Widget dashboard/mobile : widget par défaut de Jeedom, auquel on
-     * ajoute la barre d'état en haut. En cas de moindre problème, on
+     * Fin (offset juste après le </div> fermant) de l'élément <div> dont
+     * l'ouverture commence à $start. Ignore le contenu des <script> et des
+     * commentaires. null si le HTML n'est pas équilibré.
+     */
+    private static function divEnd($html, $start) {
+        if (!preg_match('/\G<div\b[^>]*>/', $html, $m, 0, $start)) {
+            return null;
+        }
+        $pos = $start + strlen($m[0]);
+        $depth = 1;
+        $re = '/<script\b.*?<\/script>|<!--.*?-->|<div\b[^>]*>|<\/div\s*>/is';
+        while ($depth > 0) {
+            if (!preg_match($re, $html, $t, PREG_OFFSET_CAPTURE, $pos)) {
+                return null;
+            }
+            $tag = strtolower(substr($t[0][0], 0, 4));
+            $pos = $t[0][1] + strlen($t[0][0]);
+            if ($tag === '<div') {
+                if (substr($t[0][0], -2) !== '/>') {
+                    $depth++;
+                }
+            } elseif ($tag === '</di') {
+                $depth--;
+            }
+        }
+        return $pos;
+    }
+
+    /**
+     * Cherche dans le widget le bloc contigu des commandes d'information du
+     * haut (Dernière synchro … Pluie détectée). Retourne array(début, fin)
+     * ou null si on ne les trouve pas toutes, d'un seul tenant (ex. ordre
+     * modifié par l'utilisateur) : on ne risque alors aucun remaniement.
+     */
+    private function findInfoBlock($html) {
+        $ranges = array();
+        foreach (self::INFO_COMMANDS as $def) {
+            if ($def['logicalId'] === 'party_mode') {
+                continue;
+            }
+            $cmd = $this->getCmd(null, $def['logicalId']);
+            if (!is_object($cmd)) {
+                continue;
+            }
+            if (!preg_match('/<div\b[^>]*\bdata-cmd_id="' . intval($cmd->getId()) . '"[^>]*>/', $html, $m, PREG_OFFSET_CAPTURE)) {
+                continue;
+            }
+            $end = self::divEnd($html, $m[0][1]);
+            if ($end === null) {
+                return null;
+            }
+            $ranges[] = array($m[0][1], $end);
+        }
+        if (count($ranges) < 4) {
+            return null;
+        }
+        usort($ranges, function ($a, $b) { return $a[0] - $b[0]; });
+        // Entre deux commandes : uniquement des espaces, des <br/> et les
+        // séparateurs de ligne du widget par défaut (<div class="break"></div>).
+        $sep = '(?:\\s|<br\\s*\\/?>|<div\\s+class="break"\\s*><\\/div>)*';
+        for ($i = 1; $i < count($ranges); $i++) {
+            $gap = substr($html, $ranges[$i - 1][1], $ranges[$i][0] - $ranges[$i - 1][1]);
+            if ($ranges[$i][0] < $ranges[$i - 1][1] || !preg_match('/^' . $sep . '$/i', $gap)) {
+                return null;
+            }
+        }
+        $start = $ranges[0][0];
+        $end = $ranges[count($ranges) - 1][1];
+        if (preg_match('/\G' . $sep . '/i', $html, $m, 0, $end)) {
+            $end += strlen($m[0]);   // le séparateur de fin de ligne suit le bloc
+        }
+        return array($start, $end);
+    }
+
+    /**
+     * Widget dashboard/mobile : widget par défaut de Jeedom, avec la carte
+     * en colonne de droite des informations du haut (tableau en deux
+     * colonnes). Si ces informations ne sont pas trouvées d'un seul tenant,
+     * la carte est ajoutée tout en bas. En cas de moindre problème, on
      * renvoie le widget par défaut inchangé.
      */
     public function toHtml($_version = 'dashboard') {
@@ -653,23 +601,33 @@ class LandroidRTK extends eqLogic {
         if (!is_string($html) || $html === '' || ($_version != 'dashboard' && $_version != 'mobile')) {
             return $html;
         }
-        if (strpos($html, 'lrtk-bar') !== false) {
+        if (strpos($html, 'lrtk-map') !== false) {
             return $html;
         }
         try {
-            $parts = $this->buildStatusBarHtml();
-            $count = 0;
-            $new = preg_replace('/^(\s*<div\b[^>]*\beqLogic-widget\b[^>]*>)/s', '$1' . str_replace(array('\\', '$'), array('\\\\', '\\$'), $parts['bar']), $html, 1, $count);
-            if ($new === null || $count !== 1) {
+            if (intval($this->getConfiguration('hideMapWidget', 0)) === 1
+                || !preg_match('/^\s*<div\b[^>]*\beqLogic-widget\b/s', $html)) {
                 return $html;
             }
-            $end = strrpos($new, '</div>');
-            if ($end === false) {
-                return $html;
+            $block = $this->findInfoBlock($html);
+            if ($block !== null) {
+                $seg = substr($html, $block[0], $block[1] - $block[0]);
+                // Le tableau occupe toute la largeur de la zone des commandes (qui est
+                // elle-même un conteneur flex : sans flex-basis 100 % il se réduirait à
+                // son contenu et resterait au milieu d'un grand widget). La colonne de
+                // gauche reproduit le comportement de cette zone (retours à la ligne
+                // « div.break » du widget par défaut), celle de droite centre la carte.
+                $table = '<div class="lrtk-top" style="display:flex;flex:0 0 100%;width:100%;box-sizing:border-box;align-items:center;gap:6px;">'
+                    . '<div class="lrtk-left" style="flex:1 1 0;min-width:0;align-self:flex-start;display:flex;flex-wrap:wrap;justify-content:space-evenly;align-items:flex-start;">' . $seg . '</div>'
+                    . $this->buildMapImageHtml(true) . '</div>';
+                return substr($html, 0, $block[0]) . $table . substr($html, $block[1]);
             }
-            return substr($new, 0, $end) . $parts['script'] . substr($new, $end);
+            // Repli : en fin de widget, juste avant la fermeture de la <div> racine.
+            $box = $this->buildMapImageHtml(false);
+            $new = preg_replace('/(<\/div>)((?:\s*<script\b(?:(?!<\/script>).)*<\/script>)*\s*)$/s', str_replace(array('\\', '$'), array('\\\\', '\\$'), $box) . '$1$2', $html, 1, $count);
+            return ($new === null || $count !== 1) ? $html : $new;
         } catch (\Throwable $e) {
-            log::add('LandroidRTK', 'debug', 'toHtml(): barre d\'état ignorée (' . get_class($e) . ': ' . $e->getMessage() . ')');
+            log::add('LandroidRTK', 'debug', 'toHtml(): vignette de carte ignorée (' . get_class($e) . ': ' . $e->getMessage() . ')');
             return $html;
         }
     }
@@ -692,6 +650,9 @@ class LandroidRTK extends eqLogic {
     const DEFAULT_CUTTING_WIDTH = 0.18;
     const TRAIL_MIN_DISTANCE_M = 0.25;
     const TRAIL_MAX_POINTS = 12000;
+    // Une « tonte » = une session de trace : une nouvelle session démarre
+    // quand le robot bouge après au moins 4 h sans point enregistré.
+    const TRAIL_SESSION_GAP_S = 14400;
 
     public function getCuttingWidthM() {
         $model = strtoupper((string) $this->getConfiguration('model', ''));
@@ -717,8 +678,57 @@ class LandroidRTK extends eqLogic {
         return sqrt($x * $x + $y * $y);
     }
 
-    private static function trailFile($eqLogic_id, $day) {
-        return jeedom::getTmpFolder('LandroidRTK') . '/trail_' . intval($eqLogic_id) . '_' . $day . '.jsonl';
+    private static function trailFile($eqLogic_id, $sid) {
+        return jeedom::getTmpFolder('LandroidRTK') . '/trail_' . intval($eqLogic_id) . '_' . $sid . '.jsonl';
+    }
+
+    /** Identifiant de la session de trace en cours (la plus récente), ou null. */
+    private static function currentTrailSid($id) {
+        $last = json_decode((string) cache::byKey('LandroidRTK::lastpt::' . $id)->getValue('{}'), true);
+        if (is_array($last) && !empty($last['sid'])) {
+            return (string) $last['sid'];
+        }
+        $best = null;
+        foreach (glob(jeedom::getTmpFolder('LandroidRTK') . '/trail_' . $id . '_*.jsonl') ?: array() as $f) {
+            if ($best === null || filemtime($f) >= filemtime($best)) {
+                $best = $f;
+            }
+        }
+        return $best ? preg_replace('/^trail_\d+_(.*)\.jsonl$/', '$1', basename($best)) : null;
+    }
+
+    /** Image PNG de la dernière tonte (envoyée avec la notification de fin de tonte). */
+    public static function lastMowPng($eqLogic_id) {
+        foreach (self::mapDirs() as $dir) {
+            if ($dir && is_file($dir . '/lastmow_' . intval($eqLogic_id) . '.png')) {
+                return $dir . '/lastmow_' . intval($eqLogic_id) . '.png';
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Génère le PNG de la carte (avec la trace de la tonte) dans le premier
+     * dossier accessible en écriture. Retourne array('ok'=>bool,'path'=>?,'reason'=>?).
+     */
+    public function saveMapPng() {
+        $data = $this->getMapData();
+        $reason = 'aucun dossier accessible en écriture';
+        foreach (self::mapDirs() as $dir) {
+            if (!$dir) {
+                continue;
+            }
+            $path = $dir . '/lastmow_' . intval($this->getId()) . '.png';
+            $r = LandroidRTKMapPng::render($data, $path);
+            if ($r['ok']) {
+                return array('ok' => true, 'path' => $path, 'reason' => '');
+            }
+            $reason = $r['reason'];
+            if (strpos($reason, 'GD') !== false || strpos($reason, 'carte') !== false) {
+                break;
+            }
+        }
+        return array('ok' => false, 'path' => null, 'reason' => $reason);
     }
 
     private static function validPos($pos) {
@@ -730,7 +740,7 @@ class LandroidRTK extends eqLogic {
 
     /**
      * Mémorise la dernière position / le cap du robot, et ajoute un point à
-     * la trace du jour quand il a réellement bougé (jamais à la station :
+     * la trace de la tonte quand il a réellement bougé (jamais à la station :
      * le signal RTK y dérive de quelques mètres sans que le robot bouge).
      * Aucune coordonnée n'est écrite dans les journaux.
      */
@@ -767,30 +777,74 @@ class LandroidRTK extends eqLogic {
             if ($docked) {
                 return;
             }
-            $day = date('Y-m-d');
             $last_key = 'LandroidRTK::lastpt::' . $id;
             $last = json_decode((string) cache::byKey($last_key)->getValue('{}'), true);
-            if (is_array($last) && isset($last['day']) && $last['day'] === $day && isset($last['lat'])) {
+            if (is_array($last) && !empty($last['sid']) && isset($last['lat'], $last['ts']) && ($now - intval($last['ts'])) < self::TRAIL_SESSION_GAP_S) {
                 if (self::distanceM(array($last['lat'], $last['lon']), array($lat, $lon)) < self::TRAIL_MIN_DISTANCE_M) {
                     return;
                 }
                 if (isset($last['n']) && intval($last['n']) >= self::TRAIL_MAX_POINTS) {
                     return;
                 }
+                $sid = (string) $last['sid'];
             } else {
-                $last = array('day' => $day, 'n' => 0);
-                // Nouveau jour : on supprime les traces des jours précédents.
+                $sid = date('Ymd-His', $now);
+                $last = array('sid' => $sid, 'n' => 0);
+                // Nouvelle tonte : on supprime la trace précédente et l'image PNG qui en avait été tirée.
                 foreach (glob(jeedom::getTmpFolder('LandroidRTK') . '/trail_' . $id . '_*.jsonl') ?: array() as $old) {
-                    if (basename($old) !== basename(self::trailFile($id, $day))) {
+                    if (basename($old) !== basename(self::trailFile($id, $sid))) {
                         @unlink($old);
                     }
                 }
+                foreach (self::mapDirs() as $dir) {
+                    if ($dir && is_file($dir . '/lastmow_' . $id . '.png')) {
+                        @unlink($dir . '/lastmow_' . $id . '.png');
+                    }
+                }
             }
-            @file_put_contents(self::trailFile($id, $day), json_encode(array($now, $lat, $lon)) . "\n", FILE_APPEND | LOCK_EX);
-            cache::set($last_key, json_encode(array('day' => $day, 'lat' => $lat, 'lon' => $lon, 'n' => (isset($last['n']) ? intval($last['n']) : 0) + 1)));
+            $written = @file_put_contents(self::trailFile($id, $sid), json_encode(array($now, $lat, $lon)) . "\n", FILE_APPEND | LOCK_EX);
+            $err_key = 'LandroidRTK::trailerr::' . $id;
+            if ($written === false) {
+                // Sans ce signal, une trace jamais enregistrée resterait invisible.
+                cache::set($err_key, json_encode(array('text' => 'écriture impossible dans ' . jeedom::getTmpFolder('LandroidRTK') . ' (droits ?)', 'ts' => $now)));
+                return;
+            }
+            if (cache::byKey($err_key)->getValue('') !== '') {
+                cache::set($err_key, '');
+            }
+            cache::set($last_key, json_encode(array('sid' => $sid, 'lat' => $lat, 'lon' => $lon, 'ts' => $now, 'n' => (isset($last['n']) ? intval($last['n']) : 0) + 1)));
         } catch (\Throwable $e) {
             log::add('LandroidRTK', 'debug', 'rememberRtkPosition(): ' . get_class($e) . ': ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Dossiers où stocker la carte : data/map/ du plugin d'abord (persistant,
+     * comme le fait un plugin caméra pour ses images), puis le dossier
+     * temporaire de Jeedom si les droits ne le permettent pas.
+     */
+    public static function mapDirs() {
+        return array(
+            realpath(dirname(__FILE__) . '/../..') . '/data/map',
+            jeedom::getTmpFolder('LandroidRTK'),
+        );
+    }
+
+    public static function mapFile($dir, $eqLogic_id) {
+        return $dir . '/map_' . intval($eqLogic_id) . '.json';
+    }
+
+    /** Mémorise le texte de diagnostic de la carte envoyé par le démon (écrit seulement s'il change). */
+    public static function rememberMapStatus($eqLogic, $text) {
+        if (!is_string($text) || $text === '') {
+            return;
+        }
+        $key = 'LandroidRTK::mapstatus::' . intval($eqLogic->getId());
+        $prev = json_decode((string) cache::byKey($key)->getValue('{}'), true);
+        if (is_array($prev) && isset($prev['text']) && $prev['text'] === $text) {
+            return;
+        }
+        cache::set($key, json_encode(array('text' => substr($text, 0, 600), 'ts' => time())));
     }
 
     /** Enregistre la carte RTK poussée par le démon. */
@@ -799,23 +853,75 @@ class LandroidRTK extends eqLogic {
         if (!is_object($eqLogic) || !is_array($map)) {
             return false;
         }
-        cache::set('LandroidRTK::map::' . intval($eqLogic->getId()), json_encode(array(
+        $id = intval($eqLogic->getId());
+        $json = json_encode(array(
             'map_id' => (string) $map_id,
             'fetched_at' => time(),
             'map' => $map,
-        )));
+        ));
+        if (!is_string($json) || $json === '') {
+            log::add('LandroidRTK', 'error', 'storeMap: carte RTK non encodable en JSON (' . json_last_error_msg() . ').');
+            return false;
+        }
+        foreach (self::mapDirs() as $dir) {
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            if (!is_dir($dir) || !is_writable($dir)) {
+                continue;
+            }
+            $file = self::mapFile($dir, $id);
+            $tmp = $file . '.tmp';
+            // Écriture atomique : une lecture simultanée ne voit jamais un fichier à moitié écrit.
+            if (@file_put_contents($tmp, $json, LOCK_EX) === strlen($json) && @rename($tmp, $file)) {
+                @chmod($file, 0664);
+                // Une éventuelle ancienne copie dans l'autre dossier ne doit pas masquer la nouvelle.
+                foreach (self::mapDirs() as $other) {
+                    if ($other !== $dir && is_file(self::mapFile($other, $id))) {
+                        @unlink(self::mapFile($other, $id));
+                    }
+                }
+                return true;
+            }
+            @unlink($tmp);
+        }
+        // Dernier recours : le cache Jeedom.
+        log::add('LandroidRTK', 'error', 'storeMap: aucun dossier inscriptible pour la carte, utilisation du cache Jeedom (vérifiez les droits de plugins/LandroidRTK/data).');
+        cache::set('LandroidRTK::map::' . $id, $json);
         return true;
+    }
+
+    /** Relit la carte stockée : array('data' => ..., 'source' => 'file'|'cache'|null, 'bytes' => n). */
+    private static function loadStoredMap($id) {
+        foreach (self::mapDirs() as $dir) {
+            $file = self::mapFile($dir, $id);
+            if (is_file($file)) {
+                $raw = @file_get_contents($file);
+                $data = is_string($raw) ? json_decode($raw, true) : null;
+                if (is_array($data)) {
+                    return array('data' => $data, 'source' => 'file', 'bytes' => strlen($raw), 'dir' => $dir);
+                }
+            }
+        }
+        $raw = (string) cache::byKey('LandroidRTK::map::' . intval($id))->getValue('');
+        $data = ($raw !== '') ? json_decode($raw, true) : null;
+        if (is_array($data)) {
+            return array('data' => $data, 'source' => 'cache', 'bytes' => strlen($raw), 'dir' => null);
+        }
+        return array('data' => null, 'source' => null, 'bytes' => 0, 'dir' => null);
     }
 
     /** Données pour l'onglet Carte (réservé aux utilisateurs connectés). */
     public function getMapData() {
         $id = intval($this->getId());
-        $stored = json_decode((string) cache::byKey('LandroidRTK::map::' . $id)->getValue('null'), true);
+        $loaded = self::loadStoredMap($id);
+        $stored = $loaded['data'];
         $pos = json_decode((string) cache::byKey('LandroidRTK::pos::' . $id)->getValue('null'), true);
 
         $trail = array();
-        $file = self::trailFile($id, date('Y-m-d'));
-        if (is_file($file)) {
+        $sid = self::currentTrailSid($id);
+        $file = $sid ? self::trailFile($id, $sid) : null;
+        if ($file && is_file($file)) {
             $lines = @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: array();
             if (count($lines) > self::TRAIL_MAX_POINTS) {
                 $lines = array_slice($lines, -self::TRAIL_MAX_POINTS);
@@ -828,10 +934,33 @@ class LandroidRTK extends eqLogic {
             }
         }
 
+        $trail_total = count($trail);
+        $trail_last_ts = $trail_total ? $trail[$trail_total - 1][0] : null;
+
+        $terr = json_decode((string) cache::byKey('LandroidRTK::trailerr::' . $id)->getValue('null'), true);
+        $mstat = json_decode((string) cache::byKey('LandroidRTK::mapstatus::' . $id)->getValue('null'), true);
         $daemon = self::deamon_info();
         return array(
+            // Diagnostic de la trace : combien de points enregistrés (affichés ou non côté navigateur), et la dernière erreur d'écriture.
+            'trail_diag' => array(
+                'stored' => $trail_total,
+                'last_ts' => $trail_last_ts,
+                'error' => (is_array($terr) && isset($terr['text'])) ? $terr['text'] : null,
+            ),
+            'map_status' => (is_array($mstat) && isset($mstat['text'])) ? $mstat['text'] : null,
+            'map_status_ts' => (is_array($mstat) && isset($mstat['ts'])) ? $mstat['ts'] : null,
             'map' => (is_array($stored) && isset($stored['map'])) ? $stored['map'] : null,
             'map_fetched_at' => (is_array($stored) && isset($stored['fetched_at'])) ? $stored['fetched_at'] : null,
+            // Diagnostic (aucune coordonnée) : d'où vient la carte, quelle taille, quelle structure.
+            'map_diag' => array(
+                'source' => $loaded['source'],
+                'bytes' => $loaded['bytes'],
+                'dir' => $loaded['dir'],
+                'map_id' => (is_array($stored) && isset($stored['map_id'])) ? $stored['map_id'] : null,
+                'keys' => (is_array($stored) && isset($stored['map']) && is_array($stored['map'])) ? array_slice(array_keys($stored['map']), 0, 20) : array(),
+                'layers' => (is_array($stored) && isset($stored['map']['layers']) && is_array($stored['map']['layers']))
+                    ? array_map(function ($l) { return is_array($l) ? count($l) : 0; }, $stored['map']['layers']) : array(),
+            ),
             'pos' => is_array($pos) ? $pos : null,
             'trail' => $trail,
             'cutting_width_m' => $this->getCuttingWidthM(),
@@ -991,10 +1120,8 @@ class LandroidRTK extends eqLogic {
         if (isset($data['party_mode_enabled']) && $data['party_mode_enabled'] !== null) {
             $eqLogic->checkAndUpdateCmd('party_mode', $data['party_mode_enabled'] ? 'Activé' : 'Désactivé');
         }
-        if (isset($data['wifi_rssi']) && is_numeric($data['wifi_rssi'])) {
-            $eqLogic->checkAndUpdateCmd('wifi_rssi', intval($data['wifi_rssi']));
-        }
         self::rememberRtkPosition($eqLogic, $data);
+        self::rememberMapStatus($eqLogic, isset($data['map_status']) ? $data['map_status'] : null);
 
         if (!empty($data['error_message'])) {
             log::add('LandroidRTK', 'error', $eqLogic->getHumanName() . ' : ' . $data['error_message']);

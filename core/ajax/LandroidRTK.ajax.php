@@ -109,6 +109,27 @@ try {
         ajax::success($eqLogic->dumpDiagnostic());
     }
 
+    if (init('action') == 'saveMapPng') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'LandroidRTK') {
+            throw new Exception(__('Équipement introuvable', __FILE__));
+        }
+        $r = $eqLogic->saveMapPng();
+        ajax::success(array('success' => $r['ok'], 'file' => $r['path'], 'message' => $r['ok'] ? '' : $r['reason']));
+    }
+
+    if (init('action') == 'downloadMapPng') {
+        $path = LandroidRTK::lastMowPng(intval(init('id')));
+        if ($path === null) {
+            throw new Exception(__('Fichier introuvable', __FILE__));
+        }
+        header('Content-Type: image/png');
+        header('Content-Disposition: attachment; filename="carte.png"');
+        header('Content-Length: ' . filesize($path));
+        readfile($path);
+        exit;
+    }
+
     if (init('action') == 'downloadDiagnostic') {
         // Téléchargement direct (session admin) d'un export déjà généré.
         $path = LandroidRTK::findDiagnosticFile(init('file'));

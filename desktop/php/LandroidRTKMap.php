@@ -6,6 +6,7 @@ if (!isConnect()) {
 <div role="tabpanel" class="tab-pane" id="maptab">
     <div style="text-align:left; margin:10px;">
         <a class="btn btn-default" id="bt_lrtkMapRefresh"><i class="fas fa-sync"></i> {{Rafraîchir}}</a>
+        <a class="btn btn-default" id="bt_lrtkMapPng" style="margin-left:5px;" title="{{Enregistre la carte avec la trace actuelle en image PNG (celle qui est jointe à la notification de fin de tonte)}}"><i class="fas fa-image"></i> {{Enregistrer l'image (PNG)}}</a>
         <label class="checkbox-inline" style="margin-left:10px;"><input type="checkbox" id="cb_lrtkMapAuto" checked> {{Rafraîchir automatiquement (toutes les 15 s)}}</label>
         <a class="btn btn-default pull-right" id="bt_lrtkDiag" title="{{Génère un fichier zip anonymisé (coordonnées décalées, identifiants masqués) à transmettre pour le diagnostic de la carte}}"><i class="fas fa-file-archive"></i> {{Exporter les données de diagnostic}}</a>
     </div>
