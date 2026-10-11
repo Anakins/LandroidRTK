@@ -650,9 +650,8 @@ class LandroidRTK extends eqLogic {
     const DEFAULT_CUTTING_WIDTH = 0.18;
     const TRAIL_MIN_DISTANCE_M = 0.25;
     const TRAIL_MAX_POINTS = 12000;
-    // Une « tonte » = une session de trace : une nouvelle session démarre
-    // quand le robot bouge après au moins 4 h sans point enregistré.
-    const TRAIL_SESSION_GAP_S = 14400;
+    // La trace repart de zéro chaque jour (la tondeuse peut rentrer charger
+    // et repartir plusieurs fois dans la journée : tout reste sur la carte).
 
     public function getCuttingWidthM() {
         $model = strtoupper((string) $this->getConfiguration('model', ''));
@@ -779,7 +778,7 @@ class LandroidRTK extends eqLogic {
             }
             $last_key = 'LandroidRTK::lastpt::' . $id;
             $last = json_decode((string) cache::byKey($last_key)->getValue('{}'), true);
-            if (is_array($last) && !empty($last['sid']) && isset($last['lat'], $last['ts']) && ($now - intval($last['ts'])) < self::TRAIL_SESSION_GAP_S) {
+            if (is_array($last) && !empty($last['sid']) && isset($last['lat'], $last['ts']) && date('Ymd', intval($last['ts'])) === date('Ymd', $now)) {
                 if (self::distanceM(array($last['lat'], $last['lon']), array($lat, $lon)) < self::TRAIL_MIN_DISTANCE_M) {
                     return;
                 }
@@ -790,7 +789,7 @@ class LandroidRTK extends eqLogic {
             } else {
                 $sid = date('Ymd-His', $now);
                 $last = array('sid' => $sid, 'n' => 0);
-                // Nouvelle tonte : on supprime la trace précédente et l'image PNG qui en avait été tirée.
+                // Nouveau jour : on supprime la trace précédente et l'image PNG qui en avait été tirée.
                 foreach (glob(jeedom::getTmpFolder('LandroidRTK') . '/trail_' . $id . '_*.jsonl') ?: array() as $old) {
                     if (basename($old) !== basename(self::trailFile($id, $sid))) {
                         @unlink($old);

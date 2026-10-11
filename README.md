@@ -27,7 +27,7 @@ Pilotage des tondeuses robot **Worx Landroid Vision Cloud** (2WD/4WD, avec RTK/G
 - Suivi en temps réel via un démon connecté en permanence (MQTT) : batterie, statut, erreurs, position de coupe...
 - Commandes manuelles : Démarrer, Stop, Retour à la base, Tonte des bordures, Mode festif (activer/désactiver, avec état affiché), et lecture de l'état de la coupe intelligente des bordures
 - Statuts et erreurs traduits en français (tous les codes d'erreur connus, y compris ceux propres aux modèles Vision/RTK)
-- **Carte dans le widget** : vignette du jardin recadrée, avec la position du robot et la trace de la dernière tonte, rafraîchie toutes les 30 s
+- **Carte dans le widget** : vignette du jardin recadrée, avec la position du robot et la trace du jour, rafraîchie toutes les 30 s
 - **Onglet Carte** : plan du jardin (zones, exclusions, station), position du robot et passages du jour, dessinés sans service externe
 - Alerte automatique en cas de perte de connexion prolongée (via le heartbeat natif Jeedom)
 - **Programmation automatique de tonte** basée sur météo/humidité/pluie — voir [section dédiée](#6-programmation-automatique-de-tonte)
@@ -79,7 +79,7 @@ Le code source est disponible sur [GitHub](https://github.com/Anakins/LandroidRT
 
 ### Carte dans le widget
 
-Dans le widget Dashboard (et mobile), les informations du haut sont regroupées à gauche d'un tableau et une vignette de la carte occupe la colonne de droite (si l'ordre des commandes a été modifié, elle est ajoutée en bas). La vignette est recadrée sur le jardin (zones et station + petite marge), avec la position du robot et la trace de la dernière tonte. C'est une simple image dessinée par Jeedom (aucun script dans le widget) qui se recharge toute seule toutes les 30 secondes. Elle n'apparaît qu'une fois la carte reçue (démon démarré). Pour la cacher : cocher **« Masquer la carte du widget »** dans la configuration de l'équipement.
+Dans le widget Dashboard (et mobile), les informations du haut sont regroupées à gauche d'un tableau et une vignette de la carte occupe la colonne de droite (si l'ordre des commandes a été modifié, elle est ajoutée en bas). La vignette est recadrée sur le jardin (zones et station + petite marge), avec la position du robot et la trace du jour. C'est une simple image dessinée par Jeedom (aucun script dans le widget) qui se recharge toute seule toutes les 30 secondes. Elle n'apparaît qu'une fois la carte reçue (démon démarré). Pour la cacher : cocher **« Masquer la carte du widget »** dans la configuration de l'équipement.
 
 ### Onglet Carte
 
@@ -89,7 +89,7 @@ Un nouvel onglet **Carte** sur la page de l'équipement affiche le plan du jardi
 - La position du robot est celle remontée en temps réel ; à la station, le robot est dessiné sur le repère de la station (le signal RTK y dérive de quelques mètres).
 - La carte est enregistrée dans `plugins/LandroidRTK/data/map/` (ou, à défaut de droits d'écriture, dans le dossier temporaire de Jeedom). L'onglet affiche l'origine et la taille du stockage, et explique pourquoi la carte est vide le cas échéant.
 - **Notification de fin de tonte** : cocher « Reçoit « fin de tonte » » sur une commande de notification pour recevoir, à la fin de la période de tonte (départ + durée paramétrée + 30 min), un message avec la carte en image PNG (option `files` de la commande). Le bouton « Enregistrer l'image (PNG) » de l'onglet Carte crée la même image à la demande.
-- La trace de la dernière tonte est enregistrée dans le dossier temporaire de Jeedom et repart de zéro à chaque nouvelle tonte (elle est donc aussi effacée au redémarrage de la machine).
+- La trace du jour est enregistrée dans le dossier temporaire de Jeedom et repart de zéro chaque jour (elle est donc aussi effacée au redémarrage de la machine).
 - **Confidentialité** : les coordonnées RTK sont précises au centimètre. Elles restent sur votre Jeedom, ne sont écrites dans aucun journal, et la carte est dessinée sans fond de plan externe. Ne partagez pas de capture de cette carte.
 - Le point d'accès Worx qui fournit la carte n'est pas documenté officiellement : s'il changeait, l'onglet affiche « Aucune carte reçue » et le reste du plugin n'est pas affecté.
 

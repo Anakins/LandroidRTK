@@ -2,7 +2,7 @@
 
 ## 1.7.0 (2026-10-11)
 - **Notification de fin de tonte avec la carte en image** : nouvelle case « Reçoit "fin de tonte" (carte envoyée au format PNG) » dans les notifications du planificateur (désactivée par défaut). Le message reprend le récapitulatif habituel avec émojis (🏁 fin, ⏱️ horaires, météo, 🌡️ température, 💧 humidité, 🔋 batterie). Elle est envoyée une seule fois, les jours où le planificateur a lancé une tonte, à l'heure de départ + durée de tonte paramétrée + 30 min. L'image PNG est dessinée par PHP (extension GD, déjà requise par Jeedom) et jointe via l'option `files` de la commande de notification. Si l'image ne peut pas être créée, seul le texte est envoyé (raison dans les logs).
-- **Trace par tonte** : la trace n'est plus remise à zéro chaque jour mais à chaque nouvelle tonte (robot en mouvement après au moins 4 h sans point). L'image PNG de la dernière tonte est conservée jusque-là.
+- **Trace du jour conservée** : la trace repart de zéro chaque jour (comme avant), même si la tondeuse rentre charger et repart plusieurs fois dans la journée. L'image PNG de la dernière tonte est supprimée avec elle, au premier mouvement du jour suivant.
 - **Trace plus large** : les traits de tonte sont deux fois plus épais (widget, onglet Carte et image PNG), pour supprimer l'effet « zèbre » sur les bords.
 - Onglet Carte : bouton « Enregistrer l'image (PNG) » pour créer et télécharger l'image à la demande.
 

@@ -371,7 +371,7 @@ if (typeof $ !== 'undefined' && typeof document !== 'undefined' && $('#maptab').
                 parts.push('{{position du robot inconnue}}');
             }
             var td = d.trail_diag || {};
-            var trailTxt = '{{trace de la dernière tonte}} : ' + built.info.trailPoints + ' {{points affichés}}';
+            var trailTxt = '{{trace du jour}} : ' + built.info.trailPoints + ' {{points affichés}}';
             if (td.stored !== undefined) {
                 trailTxt += ' / ' + td.stored + ' {{enregistrés}}';
                 if (td.stored === 0 && !td.error) {
