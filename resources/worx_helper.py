@@ -7,6 +7,7 @@ si besoin d'un script indépendant).
 Modes :
     list                        Liste les tondeuses "Vision" du compte (JSON)
     status <serial>             Statut détaillé d'une tondeuse (JSON)
+    dump <serial> <dossier>     Export de diagnostic anonymisé (zip) dans <dossier>
     action <cmd> <serial>       Exécute une action (start/pause/home/edge)
 
 Authentification :
@@ -19,12 +20,17 @@ import asyncio
 import json
 import os
 import sys
+import zipfile
+from datetime import datetime
 
 try:
     from pyworxcloud import WorxCloud
 except ImportError as exc:
     print(json.dumps({"error": f"pyworxcloud manquant: {exc}"}))
     sys.exit(1)
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import worx_map  # noqa: E402
 
 STATUS_LABELS_FR = {
     "home": "Dans la station",
@@ -53,15 +59,75 @@ STATUS_LABELS_FR = {
     "error": "Erreur",
     "rain_delay": "Attente pluie",
     "offline": "Hors ligne",
+    # Statuts supplémentaires connus de pyworxcloud (v6.x), qui
+    # s'affichaient jusque-là en anglais brut. ATTENTION : ne jamais
+    # modifier les libellés "Dans la station" et "En charge" ci-dessus :
+    # la programmation (LandroidRTKScheduler) les compare tels quels pour
+    # savoir si le robot est déjà à la station.
+    "idle": "Inactive",
+    "start sequence": "Démarrage",
+    "digital fence escape": "Sortie de la limite virtuelle",
+    "zoning": "Déplacement vers la zone",
+    "cutting edge": "Coupe les bordures",
+    "searching area": "Recherche de la zone",
+    "searching zone": "Recherche de zone",
+    "border crossing": "Franchissement de bordure",
+    "exploring lawn": "Exploration de la pelouse",
+    "blade blocked": "Lame bloquée",
+    "unknown": "Inconnu",
 }
 
-# Traduction des messages d'erreur bruts renvoyés par l'API Worx (champ
-# "description" de device.error) vers un libellé court en français.
-# Liste non exhaustive (pas de documentation officielle complète disponible
-# côté Worx/Positec) : les codes non répertoriés s'affichent tels quels,
-# avec juste la première lettre en majuscule.
+# Traduction des messages d'erreur renvoyés par l'API Worx. Deux niveaux :
+#   1. par IDENTIFIANT d'erreur (ERROR_LABELS_BY_ID) : le plus fiable, car
+#      l'identifiant est le code réel envoyé par le robot, alors que la
+#      description anglaise dépend de la version de pyworxcloud ;
+#   2. par DESCRIPTION anglaise (ERROR_LABELS_FR), en repli.
+# Les identifiants sont ceux de pyworxcloud (utils/state.py). Les libellés
+# des erreurs qui étaient déjà traduites avant la 1.4.0 sont inchangés.
+ERROR_LABELS_BY_ID = {
+    0: "Aucune erreur",
+    1: "Tondeuse bloquée",
+    2: "Tondeuse soulevée",
+    3: "Fil périphérique absent",
+    4: "Hors du fil périphérique",
+    5: "Délai pluie",
+    6: "Fermer le capot pour tondre",
+    7: "Fermer le capot pour rentrer",
+    8: "Moteur de lame bloqué",
+    9: "Moteur de roue bloqué",
+    10: "Tondeuse bloquée, délai dépassé",
+    11: "Tondeuse renversée",
+    12: "Batterie faible",
+    13: "Fil inversé",
+    14: "Erreur de charge",
+    15: "Délai dépassé pour rentrer à la station",
+    16: "Tondeuse verrouillée",
+    17: "Température de la batterie anormale",
+    18: "Modèle factice",
+    19: "Trappe de la batterie ouverte trop longtemps",
+    20: "Erreur de synchronisation du fil",
+    21: "Erreur de message (msg num)",
+    100: "Erreur d'accostage à la station",
+    101: "Erreur HBI",
+    102: "Erreur de mise à jour (OTA)",
+    103: "Erreur de carte",
+    104: "Pente trop forte",
+    105: "Zone inaccessible",
+    106: "Station de charge inaccessible",
+    108: "Données des capteurs insuffisantes",
+    109: "Démarrage de l'apprentissage refusé",
+    110: "Erreur de caméra (lumière insuffisante ?)",
+    111: "Exploration de la pelouse nécessaire",
+    112: "Échec de l'exploration de la carte",
+    113: "Erreur du lecteur RFID",
+    114: "Erreur des phares",
+    115: "Station de charge absente",
+    116: "Réglage de la hauteur de coupe bloqué",
+}
+
 ERROR_LABELS_FR = {
     "no error": "Aucune erreur",
+    "unknown": "Erreur inconnue",
     "trapped": "Tondeuse bloquée",
     "lifted": "Tondeuse soulevée",
     "wire missing": "Fil périphérique absent",
@@ -80,18 +146,53 @@ ERROR_LABELS_FR = {
     "wire sync": "Erreur de synchronisation du fil",
     "mower lifted": "Tondeuse soulevée",
     "alarm - mower lifted": "Alarme : tondeuse soulevée",
+    "rain delay": "Délai pluie",
+    "close door to mow": "Fermer le capot pour tondre",
+    "close door to go home": "Fermer le capot pour rentrer",
+    "wheel motor blocked": "Moteur de roue bloqué",
+    "trapped timeout": "Tondeuse bloquée, délai dépassé",
+    "locked": "Tondeuse verrouillée",
+    "battery temperature error": "Température de la batterie anormale",
+    "dummy model": "Modèle factice",
+    "battery trunk open timeout": "Trappe de la batterie ouverte trop longtemps",
+    "msg num": "Erreur de message (msg num)",
+    "charging station docking error": "Erreur d'accostage à la station",
+    "hbi error": "Erreur HBI",
+    "ota error": "Erreur de mise à jour (OTA)",
+    "map error": "Erreur de carte",
+    "excessive slope": "Pente trop forte",
+    "unreachable zone": "Zone inaccessible",
+    "unreachable charging station": "Station de charge inaccessible",
+    "insufficient sensor data": "Données des capteurs insuffisantes",
+    "training start disallowed": "Démarrage de l'apprentissage refusé",
+    "camera error": "Erreur de caméra (lumière insuffisante ?)",
+    "mapping exploration required": "Exploration de la pelouse nécessaire",
+    "mapping exploration failed": "Échec de l'exploration de la carte",
+    "rfid reader error": "Erreur du lecteur RFID",
+    "headlight error": "Erreur des phares",
+    "missing charging station": "Station de charge absente",
+    "blade height adjustment blocked": "Réglage de la hauteur de coupe bloqué",
 }
 
 
-def translate_error_label(raw_description):
-    """Traduit une description d'erreur brute vers un libellé court en
-    français, avec repli propre si le code n'est pas répertorié."""
+def translate_error_label(raw_description, error_id=None):
+    """Traduit une erreur en libellé court en français.
+
+    Ordre : identifiant d'erreur connu, puis description anglaise connue,
+    puis repli propre (description brute avec majuscule initiale). Ne change
+    jamais la notion d'erreur active (voir device_status) : seule
+    l'étiquette affichée est concernée.
+    """
+    if isinstance(error_id, int) and not isinstance(error_id, bool):
+        label = ERROR_LABELS_BY_ID.get(error_id)
+        if label is not None:
+            return label
     if not raw_description:
         return "Aucune erreur"
-    key = raw_description.strip().lower()
+    key = str(raw_description).strip().lower()
     if key in ERROR_LABELS_FR:
         return ERROR_LABELS_FR[key]
-    return raw_description.strip().capitalize()
+    return str(raw_description).strip().capitalize()
 
 CUT_PATTERN_LABELS = {
     0: "Naturel (non confirmé)",
@@ -167,7 +268,12 @@ def device_status(device):
 
     error = getattr(device, "error", {}) or {}
     error_desc = error.get("description", "no error") if isinstance(error, dict) else str(error)
-    error_label_fr = translate_error_label(error_desc)
+    error_id = error.get("id") if isinstance(error, dict) else None
+    # Traduction : n'influence QUE le libellé affiché. La notion d'erreur
+    # active (error_active, plus bas) reste calculée sur la description
+    # brute, exactement comme avant.
+    error_label_fr = translate_error_label(error_desc, error_id)
+    status_id = status.get("id") if isinstance(status, dict) else None
 
     cut_cfg = extract_cut_config(device)
     cut_pattern_code = cut_cfg.get("t")
@@ -214,14 +320,87 @@ def device_status(device):
         # sens exact de ces champs (temps restant / surface tondue ?).
         "_debug_raw_cut": (raw_dat.get("cut") or {}),
         "_debug_area_mowed_total": getattr(device, "area_mowed", None),
-        # DIAGNOSTIC TEMPORAIRE (coupe intelligente des bordures / smart
-        # trim) : pyworxcloud 6.4.2 n'expose pas cette info sous forme
-        # d'attribut dédié. On dump les payloads bruts pour repérer le
-        # champ responsable en comparant un relevé avec l'option activée
-        # et un relevé avec l'option désactivée (voir README/discussion).
-        "_debug_raw_cfg": getattr(device, "raw_cfg", {}) or {},
-        "_debug_raw_dat": raw_dat,
+        # Les dumps bruts "_debug_raw_cfg" / "_debug_raw_dat" ont été retirés en
+        # 1.4.0 : ils contenaient la position RTK précise du jardin et se
+        # retrouvaient dans les journaux de debug. Pour un diagnostic, utiliser
+        # le bouton « Exporter les données de diagnostic » (onglet Carte).
+        "status_id": status_id,
+        "error_id": error_id,
+        "wifi_rssi": worx_map.rssi_value(device),
+        "rtk_pos": worx_map.rtk_position(device),
+        "rtk_heading": worx_map.rtk_heading(device),
+        "rtk_map_id": worx_map.rtk_map_id(device),
     }
+
+
+def _public_attributes(device):
+    """Attributs publics non appelables d'un robot, pour le diagnostic."""
+    out = {}
+    for attr in dir(device):
+        if attr.startswith("_") or attr in ("raw_cfg", "raw_dat", "raw_data", "last_status"):
+            continue
+        try:
+            value = getattr(device, attr)
+        except Exception:
+            continue
+        if callable(value):
+            continue
+        out[attr] = value
+    return out
+
+
+async def dump_diagnostic(cloud, device, outdir, anonymize=True):
+    """Écrit un export de diagnostic (zip) dans `outdir`.
+
+    Contenu : configuration brute (cfg), données temps réel brutes (dat),
+    carte RTK telle que renvoyée par le cloud, et attributs de l'objet
+    pyworxcloud. Par défaut les coordonnées sont décalées (la géométrie est
+    conservée, la localisation réelle disparaît) et les identifiants
+    (numéro de série, adresse MAC, nom, e-mail...) sont masqués.
+    """
+    os.makedirs(outdir, exist_ok=True)
+    map_id = worx_map.rtk_map_id(device)
+    map_data = await worx_map.fetch_rtk_map(cloud, map_id) if map_id else None
+
+    parts = {
+        "cfg.json": getattr(device, "raw_cfg", None),
+        "dat.json": getattr(device, "raw_dat", None),
+        "map.json": map_data,
+        "device.json": _public_attributes(device),
+    }
+    parts = {name: worx_map._jsonable(value) for name, value in parts.items()}
+
+    origin = (worx_map.find_origin(parts["map.json"])
+              or worx_map.find_origin(parts["dat.json"]))
+    if anonymize:
+        parts = {name: worx_map.anonymize(value, origin) for name, value in parts.items()}
+
+    try:
+        import importlib.metadata as md
+        version = md.version("pyworxcloud")
+    except Exception:
+        version = "inconnue"
+    parts["info.json"] = {
+        "plugin": "LandroidRTK",
+        "pyworxcloud": version,
+        "date": datetime.now().isoformat(timespec="seconds"),
+        "anonymise": bool(anonymize),
+        "map_disponible": map_data is not None,
+        "modele": parts["device.json"].get("model") if isinstance(parts["device.json"], dict) else None,
+    }
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(outdir, f"landroidrtk_diagnostic_{stamp}.zip")
+    readme = (
+        "Export de diagnostic du plugin Jeedom LandroidRTK.\n"
+        "Les coordonnees ont ete decalees (geometrie conservee) et les\n"
+        "identifiants masques : voir info.json (champ 'anonymise').\n"
+    )
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, value in parts.items():
+            zf.writestr(name, json.dumps(value, indent=2, ensure_ascii=False, default=str))
+        zf.writestr("LISEZMOI.txt", readme)
+    return {"ok": True, "file": path, "files": sorted(parts), "map_disponible": map_data is not None}
 
 
 async def run():
@@ -303,6 +482,13 @@ async def run():
             sys.exit(1)
 
         serial = getattr(target_dev, "serial_number", None) or target_key
+
+        if mode == "dump":
+            outdir = sys.argv[3] if len(sys.argv) > 3 else os.getcwd()
+            await cloud.update(serial)
+            result = await dump_diagnostic(cloud, devices[target_key], outdir)
+            print(json.dumps(result, ensure_ascii=False))
+            return
 
         if mode == "status":
             await cloud.update(serial)

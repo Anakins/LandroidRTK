@@ -38,6 +38,16 @@ function LandroidRTK_update() {
         config::save('heartbeat', 1440, $pluginId);
     }
     config::save('log::level::LandroidRTK', '{"100":"1","200":"0","300":"0","400":"0","1000":"0","default":"0"}');
+    // Crée les commandes ajoutées par cette version (ex. « Signal WiFi »)
+    // sur les équipements existants, sans toucher à aucune commande déjà
+    // présente : plus besoin de relancer « Synchroniser » après une mise à jour.
+    try {
+        foreach (eqLogic::byType('LandroidRTK') as $eqLogic) {
+            LandroidRTK::ensureCommands($eqLogic, true);
+        }
+    } catch (\Throwable $e) {
+        log::add('LandroidRTK', 'error', 'Mise à jour : création des nouvelles commandes impossible (' . $e->getMessage() . ')');
+    }
     LandroidRTK::logImportant('Mise à jour du plugin Worx Vision');
 }
 

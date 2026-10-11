@@ -35,6 +35,23 @@ try {
         ajax::success(array('success' => $ok));
     }
 
+    if (init('action') == 'daemonMap') {
+        $secret = init('secret');
+        $expected = LandroidRTK::getApiKey();
+        if ($secret == '' || $secret != $expected) {
+            log::add('LandroidRTK', 'error', 'daemonMap: secret invalide reçu du démon.');
+            throw new Exception('403 - Secret invalide');
+        }
+        $map = json_decode(init('data', 'null'), true);
+        if (!is_array($map)) {
+            // Volontairement SANS le contenu : il contient des coordonnées.
+            log::add('LandroidRTK', 'error', 'daemonMap: carte RTK invalide reçue du démon.');
+            throw new Exception('Carte invalide');
+        }
+        $ok = LandroidRTK::storeMap(init('serial'), init('map_id'), $map);
+        ajax::success(array('success' => $ok));
+    }
+
     if (init('action') == 'daemonLog') {
         $secret = init('secret');
         $expected = LandroidRTK::getApiKey();
@@ -74,6 +91,35 @@ try {
         }
         $ok = $eqLogic->refreshStatus();
         ajax::success(array('success' => $ok));
+    }
+
+    if (init('action') == 'getMapData') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'LandroidRTK') {
+            throw new Exception(__('Équipement introuvable', __FILE__));
+        }
+        ajax::success($eqLogic->getMapData());
+    }
+
+    if (init('action') == 'dumpDiagnostic') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'LandroidRTK') {
+            throw new Exception(__('Équipement introuvable', __FILE__));
+        }
+        ajax::success($eqLogic->dumpDiagnostic());
+    }
+
+    if (init('action') == 'downloadDiagnostic') {
+        // Téléchargement direct (session admin) d'un export déjà généré.
+        $path = LandroidRTK::findDiagnosticFile(init('file'));
+        if ($path === null) {
+            throw new Exception(__('Fichier introuvable', __FILE__));
+        }
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('Content-Length: ' . filesize($path));
+        readfile($path);
+        exit;
     }
 
     log::add('LandroidRTK', 'error', 'ajax.php: action inconnue reçue: ' . init('action'));

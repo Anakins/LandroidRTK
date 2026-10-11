@@ -61,6 +61,7 @@ $eqLogics = eqLogic::byType($plugin->getId());
             <li role="presentation" class="active"><a href="#eqlogictab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-tachometer-alt"></i> {{Equipement}}</a></li>
             <li role="presentation"><a href="#commandtab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-list"></i> {{Commandes}}</a></li>
             <li role="presentation"><a href="#scheduletab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-clock"></i> {{Programmation}}</a></li>
+            <li role="presentation"><a href="#maptab" aria-controls="home" role="tab" data-toggle="tab"><i class="fas fa-map"></i> {{Carte}}</a></li>
         </ul>
 
         <div class="tab-content">
@@ -156,10 +157,12 @@ $eqLogics = eqLogic::byType($plugin->getId());
                 </table>
             </div>
             <?php include_file('desktop', 'LandroidRTKScheduler', 'php', 'LandroidRTK'); ?>
+            <?php include_file('desktop', 'LandroidRTKMap', 'php', 'LandroidRTK'); ?>
         </div>
     </div>
 </div>
 
 <?php include_file('desktop', 'LandroidRTK', 'js', 'LandroidRTK'); ?>
 <?php include_file('desktop', 'LandroidRTKScheduler', 'js', 'LandroidRTK'); ?>
+<?php include_file('desktop', 'LandroidRTKMap', 'js', 'LandroidRTK'); ?>
 <?php include_file('core', 'plugin.template', 'js'); ?>

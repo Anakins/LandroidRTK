@@ -25,6 +25,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from worx_helper import get_password, device_status, is_vision_model  # noqa: E402
+import worx_map  # noqa: E402
 
 from pyworxcloud import WorxCloud  # noqa: E402
 
@@ -37,6 +38,8 @@ logger = logging.getLogger("worx_daemon")
 
 RECONNECT_DELAY = 30
 POLL_INTERVAL = 10  # secondes entre deux vérifications de l'état en mémoire
+MAP_REFRESH_INTERVAL = 1800  # la carte RTK change très rarement : 30 min suffisent
+MAP_RETRY_INTERVAL = 300  # après un échec de récupération, on réessaie dans 5 min
 
 
 def push_to_jeedom(serial, data, error_message=None):
@@ -46,7 +49,9 @@ def push_to_jeedom(serial, data, error_message=None):
         logger.error("LANDROIDRTK_AJAX_URL / LANDROIDRTK_DAEMON_SECRET non définis.")
         return
 
-    payload = dict(data)
+    # Les clés "_debug*" ne servent qu'au diagnostic manuel : inutile (et
+    # lourd) de les renvoyer à Jeedom toutes les 10 secondes.
+    payload = {k: v for k, v in data.items() if not str(k).startswith("_debug")}
     if error_message:
         payload["error_message"] = error_message
 
@@ -63,6 +68,32 @@ def push_to_jeedom(serial, data, error_message=None):
             resp.read()
     except Exception as exc:
         logger.error(f"Échec push vers Jeedom pour {serial}: {exc}")
+
+
+def push_map_to_jeedom(serial, map_id, map_data):
+    """Envoie la géométrie de la carte RTK à Jeedom (action ajax daemonMap).
+
+    Aucune coordonnée n'est écrite dans les journaux, ni ici ni côté PHP.
+    """
+    ajax_url = os.environ.get("LANDROIDRTK_AJAX_URL")
+    secret = os.environ.get("LANDROIDRTK_DAEMON_SECRET")
+    if not ajax_url or not secret:
+        return False
+    body = urllib.parse.urlencode({
+        "action": "daemonMap",
+        "secret": secret,
+        "serial": serial,
+        "map_id": map_id,
+        "data": json.dumps(map_data, default=str),
+    }).encode("utf-8")
+    try:
+        req = urllib.request.Request(ajax_url, data=body, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+        return True
+    except Exception as exc:
+        logger.error(f"Échec push de la carte vers Jeedom pour {serial}: {exc}")
+        return False
 
 
 def push_log_to_jeedom(message):
@@ -96,6 +127,7 @@ async def main():
         sys.exit(1)
 
     last_error = {}
+    map_state = {}  # serial -> {"map_id", "next_try"}
     was_disconnected = False
     last_disconnect_log_time = 0
     disconnect_since = None
@@ -133,6 +165,25 @@ async def main():
                         last_error[serial] = data["error_label"] if data["error_active"] else None
 
                         push_to_jeedom(serial, data, error_message)
+
+                        # Carte RTK : à la première connexion, quand son
+                        # identifiant change, puis au plus toutes les 30 min.
+                        # Un échec n'a jamais d'incidence sur le reste.
+                        try:
+                            map_id = data.get("rtk_map_id")
+                            state = map_state.get(serial)
+                            if map_id and (
+                                state is None
+                                or state["map_id"] != map_id
+                                or time.time() >= state["next_try"]
+                            ):
+                                map_data = await worx_map.fetch_rtk_map(cloud, map_id)
+                                if map_data is not None and push_map_to_jeedom(serial, map_id, map_data):
+                                    map_state[serial] = {"map_id": map_id, "next_try": time.time() + MAP_REFRESH_INTERVAL}
+                                else:
+                                    map_state[serial] = {"map_id": map_id, "next_try": time.time() + MAP_RETRY_INTERVAL}
+                        except Exception as exc:
+                            logger.error(f"Carte RTK ({serial}) : {type(exc).__name__}")
 
                     await asyncio.sleep(POLL_INTERVAL)
 

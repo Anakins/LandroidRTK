@@ -13,6 +13,7 @@ Pilotage des tondeuses robot **Worx Landroid Vision Cloud** (2WD/4WD, avec RTK/G
 3. [Installation](#3-installation)
 4. [Configuration du compte Worx](#4-configuration-du-compte-worx)
 5. [Commandes disponibles par équipement](#5-commandes-disponibles-par-équipement)
+   - [Barre d'état du widget](#barre-détat-du-widget-batterie--wifi) · [Onglet Carte](#onglet-carte)
 6. [🕒 Programmation automatique de tonte](#6-programmation-automatique-de-tonte) *(fonctionnalité à part, voir plus bas)*
 7. [Limitations connues](#7-limitations-connues)
 8. [Mise à jour du plugin](#8-mise-à-jour-du-plugin)
@@ -25,7 +26,9 @@ Pilotage des tondeuses robot **Worx Landroid Vision Cloud** (2WD/4WD, avec RTK/G
 - Synchronisation automatique des tondeuses du compte Worx (numéro de série, modèle, image dédiée selon 2WD/4WD)
 - Suivi en temps réel via un démon connecté en permanence (MQTT) : batterie, statut, erreurs, position de coupe...
 - Commandes manuelles : Démarrer, Stop, Retour à la base, Tonte des bordures, Mode festif (activer/désactiver, avec état affiché), et lecture de l'état de la coupe intelligente des bordures
-- Statuts et erreurs traduits en français
+- Statuts et erreurs traduits en français (tous les codes d'erreur connus, y compris ceux propres aux modèles Vision/RTK)
+- **Barre d'état en haut du widget** : niveau de batterie et force du signal WiFi, mis à jour en direct
+- **Onglet Carte** : plan du jardin (zones, exclusions, station), position du robot et passages du jour, dessinés sans service externe
 - Alerte automatique en cas de perte de connexion prolongée (via le heartbeat natif Jeedom)
 - **Programmation automatique de tonte** basée sur météo/humidité/pluie — voir [section dédiée](#6-programmation-automatique-de-tonte)
 
@@ -69,10 +72,31 @@ Le code source est disponible sur [GitHub](https://github.com/Anakins/LandroidRT
 | Forme/Angle de tonte | Info | Paramètres de tonte (lecture seule) |
 | Délai pluie, Pluie détectée | Info | Capteur pluie natif du robot |
 | Mode festif | Info | Activé/Désactivé |
+| Signal WiFi | Info | Force du signal WiFi en dBm (masquée sur le widget : elle est représentée par les barres de la barre d'état) |
 | Dernière synchro | Info | Horodatage de la dernière mise à jour reçue |
 | Start / Stop / Maison / Bordures | Action | Pilotage manuel de la tondeuse |
 | Activer / Désactiver mode festif | Action | Empêche le robot de démarrer tout seul (reste à la base) — utile quand du monde ou des objets se trouvent sur la pelouse (fête, jeux d'enfants...) |
 | Rafraichir | Action | Force une mise à jour immédiate du statut |
+
+### Barre d'état du widget (batterie + WiFi)
+
+Le widget dashboard (et mobile) affiche en haut une barre d'état : à gauche la batterie (jauge, pourcentage, éclair pendant la charge), à droite le signal WiFi (4 barres et valeur en dBm, au survol aussi). Les couleurs suivent le niveau : batterie verte dès 40 %, orange dès 20 %, rouge en dessous ; WiFi vert dès -65 dBm, orange dès -75 dBm, rouge en dessous. La barre se met à jour en direct, sans recharger la page.
+
+La commande « Signal WiFi » est créée automatiquement à la mise à jour du plugin (inutile de relancer « Synchroniser »). Tant que le démon n'a pas transmis de valeur, les barres restent grisées.
+
+### Onglet Carte
+
+Un nouvel onglet **Carte** sur la page de l'équipement affiche le plan du jardin tel qu'il est enregistré chez Worx : zones de tonte (vert, contour rouge), îlots et exclusions, station de charge, position et cap du robot, et les passages de la journée (bandes plus foncées, qui s'estompent avec le temps).
+
+- La géométrie de la carte est téléchargée par le **démon** au démarrage, puis toutes les 30 minutes (et dès que l'identifiant de carte change). Le **démon doit donc tourner**.
+- La position du robot est celle remontée en temps réel ; à la station, le robot est dessiné sur le repère de la station (le signal RTK y dérive de quelques mètres).
+- La trace du jour est enregistrée dans le dossier temporaire de Jeedom et repart de zéro chaque jour (elle est donc aussi effacée au redémarrage de la machine).
+- **Confidentialité** : les coordonnées RTK sont précises au centimètre. Elles restent sur votre Jeedom, ne sont écrites dans aucun journal, et la carte est dessinée sans fond de plan externe. Ne partagez pas de capture de cette carte.
+- Le point d'accès Worx qui fournit la carte n'est pas documenté officiellement : s'il changeait, l'onglet affiche « Aucune carte reçue » et le reste du plugin n'est pas affecté.
+
+#### Exporter les données de diagnostic
+
+Le bouton **Exporter les données de diagnostic** (en haut de l'onglet Carte) génère un fichier zip dans le dossier `plugins/LandroidRTK/data/diagnostic/` (ou, à défaut de droits d'écriture, dans le dossier temporaire de Jeedom) et propose de le télécharger. Il contient la configuration brute du robot, ses dernières données temps réel, la carte et les attributs exposés par `pyworxcloud` — **anonymisés** : les coordonnées sont décalées vers un lieu fictif (les formes et les distances sont conservées) et les identifiants (numéro de série, adresse MAC, noms, e-mail) sont masqués. Utile pour signaler un problème d'affichage de la carte ou d'un nouveau modèle.
 
 ---
 
