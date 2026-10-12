@@ -1114,6 +1114,7 @@ class LandroidRTKScheduler {
     // Marge ajoutée à la durée de tonte paramétrée avant d'envoyer la
     // notification de fin de tonte (carte en image).
     const MOW_END_MARGIN_MIN = 30;
+    const MOW_END_MAX_WAIT_S = 43200;
 
     // Notification « fin de tonte » : seulement les jours où le planificateur
     // a réellement lancé une tonte. Envoyée une seule fois, à
@@ -1129,6 +1130,21 @@ class LandroidRTKScheduler {
             $now = time();
             $duration = max(60, intval($config['mow_duration_minutes']) * 60);
             if ($now < $started + $duration + self::MOW_END_MARGIN_MIN * 60) {
+                return;
+            }
+            // Le robot doit être à la station : sinon on attend son prochain
+            // retour (vérifié à chaque cycle). Statut inconnu : on envoie.
+            // Au-delà de 12 h de retard, on abandonne cette notification.
+            $status_cmd = $eqLogic->getCmd(null, 'status');
+            $status_val = is_object($status_cmd) ? trim((string) $status_cmd->execCmd()) : '';
+            $due = $started + $duration + self::MOW_END_MARGIN_MIN * 60;
+            if ($status_val !== '' && !in_array($status_val, array('Dans la station', 'En charge'), true)) {
+                if ($now - $due < self::MOW_END_MAX_WAIT_S) {
+                    return;
+                }
+                $state['mow_end_pending'] = null;
+                self::saveState($eqLogic, $state);
+                log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte abandonnée (robot toujours hors de la station 12 h après l\'heure prévue).');
                 return;
             }
             $state['mow_end_pending'] = null;
