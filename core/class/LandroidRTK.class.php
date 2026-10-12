@@ -918,6 +918,7 @@ class LandroidRTK extends eqLogic {
         $pos = json_decode((string) cache::byKey('LandroidRTK::pos::' . $id)->getValue('null'), true);
 
         $trail = array();
+        $today = date('Ymd');
         $sid = self::currentTrailSid($id);
         $file = $sid ? self::trailFile($id, $sid) : null;
         if ($file && is_file($file)) {
@@ -927,7 +928,9 @@ class LandroidRTK extends eqLogic {
             }
             foreach ($lines as $line) {
                 $pt = json_decode($line, true);
-                if (is_array($pt) && count($pt) === 3) {
+                // Seuls les points d'aujourd'hui sont affichés : la veille s'efface dès minuit,
+                // sans attendre le premier mouvement du robot (la carte, elle, reste).
+                if (is_array($pt) && count($pt) === 3 && is_numeric($pt[0]) && date('Ymd', intval($pt[0])) === $today) {
                     $trail[] = $pt;
                 }
             }
