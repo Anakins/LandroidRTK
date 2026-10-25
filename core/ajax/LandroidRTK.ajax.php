@@ -65,6 +65,10 @@ try {
         ajax::success(array('success' => true));
     }
 
+    // Appels du navigateur : on ouvre la session Jeedom (cookie), nécessaire
+    // aux téléchargements directs par lien (sans apikey dans l'adresse).
+    include_file('core', 'authentification', 'php');
+
     $apikey = init('apikey');
     $expected_apikey = LandroidRTK::getApiKey();
     $authorized_by_apikey = ($apikey != '' && $apikey == $expected_apikey);
