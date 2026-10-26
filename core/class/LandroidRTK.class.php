@@ -696,19 +696,45 @@ class LandroidRTK extends eqLogic {
         return $best ? preg_replace('/^trail_\d+_(.*)\.jsonl$/', '$1', basename($best)) : null;
     }
 
-    /** Image PNG de la dernière tonte (envoyée avec la notification de fin de tonte). */
-    public static function lastMowPng($eqLogic_id) {
+    // Les images PNG envoyées avec les notifications sont conservées 30 jours
+    // (la notification de l'application les relit sur le disque), puis effacées.
+    const MAP_PNG_KEEP_DAYS = 30;
+
+    /** Images PNG de l'équipement, la plus récente en premier. */
+    private static function pngFiles($eqLogic_id) {
+        $all = array();
         foreach (self::mapDirs() as $dir) {
-            if ($dir && is_file($dir . '/lastmow_' . intval($eqLogic_id) . '.png')) {
-                return $dir . '/lastmow_' . intval($eqLogic_id) . '.png';
+            if (!$dir) {
+                continue;
+            }
+            $files = array_merge(glob($dir . '/lastmow_' . intval($eqLogic_id) . '_*.png') ?: array(), glob($dir . '/lastmow_' . intval($eqLogic_id) . '.png') ?: array());
+            foreach ($files as $f) {
+                $all[$f] = filemtime($f);
             }
         }
-        return null;
+        arsort($all);
+        return array_keys($all);
+    }
+
+    /** Image PNG la plus récente (envoyée avec la notification de fin de tonte). */
+    public static function lastMowPng($eqLogic_id) {
+        $f = self::pngFiles($eqLogic_id);
+        return $f ? $f[0] : null;
+    }
+
+    private static function purgeOldPng($eqLogic_id) {
+        foreach (self::pngFiles($eqLogic_id) as $f) {
+            if (time() - filemtime($f) > self::MAP_PNG_KEEP_DAYS * 86400) {
+                @unlink($f);
+            }
+        }
     }
 
     /**
-     * Génère le PNG de la carte (avec la trace de la tonte) dans le premier
-     * dossier accessible en écriture. Retourne array('ok'=>bool,'path'=>?,'reason'=>?).
+     * Génère le PNG de la carte (avec la trace du jour) dans le premier
+     * dossier accessible en écriture. Un nom différent à chaque image, pour
+     * que les anciennes notifications gardent la leur.
+     * Retourne array('ok'=>bool,'path'=>?,'reason'=>?).
      */
     public function saveMapPng() {
         $data = $this->getMapData();
@@ -717,9 +743,10 @@ class LandroidRTK extends eqLogic {
             if (!$dir) {
                 continue;
             }
-            $path = $dir . '/lastmow_' . intval($this->getId()) . '.png';
+            $path = $dir . '/lastmow_' . intval($this->getId()) . '_' . date('Ymd-His') . '.png';
             $r = LandroidRTKMapPng::render($data, $path);
             if ($r['ok']) {
+                self::purgeOldPng(intval($this->getId()));
                 return array('ok' => true, 'path' => $path, 'reason' => '');
             }
             $reason = $r['reason'];
@@ -789,15 +816,10 @@ class LandroidRTK extends eqLogic {
             } else {
                 $sid = date('Ymd-His', $now);
                 $last = array('sid' => $sid, 'n' => 0);
-                // Nouveau jour : on supprime la trace précédente et l'image PNG qui en avait été tirée.
+                // Nouveau jour : on supprime la trace précédente (les images PNG déjà envoyées sont conservées).
                 foreach (glob(jeedom::getTmpFolder('LandroidRTK') . '/trail_' . $id . '_*.jsonl') ?: array() as $old) {
                     if (basename($old) !== basename(self::trailFile($id, $sid))) {
                         @unlink($old);
-                    }
-                }
-                foreach (self::mapDirs() as $dir) {
-                    if ($dir && is_file($dir . '/lastmow_' . $id . '.png')) {
-                        @unlink($dir . '/lastmow_' . $id . '.png');
                     }
                 }
             }

@@ -2,9 +2,10 @@
 
 ## 1.7.0 (2026-10-11)
 - **Notification de fin de tonte avec la carte en image** : nouvelle case « Reçoit "fin de tonte" (carte envoyée au format PNG) » dans les notifications du planificateur (désactivée par défaut). Le message reprend le récapitulatif habituel avec émojis (🏁 fin, ⏱️ horaires, météo, 🌡️ température, 💧 humidité, 🔋 batterie). Si le robot n'est pas à la station à ce moment-là, la notification attend son prochain retour (abandon après 12 h). Elle est envoyée une seule fois, les jours où le planificateur a lancé une tonte, à l'heure de départ + durée de tonte paramétrée + 30 min. L'image PNG est dessinée par PHP (extension GD, déjà requise par Jeedom) et jointe via l'option `files` de la commande de notification. Si l'image ne peut pas être créée, seul le texte est envoyé (raison dans les logs).
-- **Trace du jour conservée** : la trace repart de zéro chaque jour (comme avant), même si la tondeuse rentre charger et repart plusieurs fois dans la journée. Les lignes tondues de la veille disparaissent de la carte dès minuit (la carte, le tour des zones et les zones interdites restent). L'image PNG de la dernière tonte est supprimée au premier mouvement du jour suivant.
+- **Trace du jour conservée** : la trace repart de zéro chaque jour (comme avant), même si la tondeuse rentre charger et repart plusieurs fois dans la journée. Les lignes tondues de la veille disparaissent de la carte dès minuit (la carte, le tour des zones et les zones interdites restent).
 - **Trace plus large** : les traits de tonte sont deux fois plus épais (widget, onglet Carte et image PNG), pour supprimer l'effet « zèbre » sur les bords.
 - **Bug corrigé (téléchargements)** : le lien « Télécharger » (export de diagnostic, image PNG) tournait dans le vide, la session Jeedom n'étant pas ouverte par le script ; corrigé.
+- **Images conservées 30 jours** : chaque image PNG envoyée a son propre nom (`lastmow_<id>_<date>-<heure>.png`, dossier `data/map/` du plugin) et n'est plus effacée ni écrasée par la suivante : les anciennes notifications (Jeedom Connect…) gardent leur image. Les images de plus de 30 jours sont supprimées automatiquement.
 - Onglet Carte : bouton « Enregistrer l'image (PNG) » pour créer et télécharger l'image à la demande.
 
 ## 1.6.4 (2026-10-11)
