@@ -958,8 +958,6 @@ class LandroidRTKScheduler {
      * d'ensemble complète de ce qui bloque (ou non) le démarrage.
      */
     public static function getConditionsStatus($eqLogic, $config) {
-        self::checkMowEnd($eqLogic, $config);
-
         $state = self::getState($eqLogic);
         $now = time();
         $today = date('Y-m-d', $now);
@@ -1115,6 +1113,14 @@ class LandroidRTKScheduler {
     // notification de fin de tonte (carte en image).
     const MOW_END_MARGIN_MIN = 30;
     const MOW_END_MAX_WAIT_S = 43200;
+    // Statuts (libellés de worx_helper.py) où le robot est encore au travail.
+    const ACTIVE_STATUS_LABELS = array(
+        'Tond la pelouse', 'Coupe les bordures', 'Démarrage', 'Départ de la station',
+        'Retour à la station', 'Recherche de la station', 'Recherche du fil', 'Suivi du fil',
+        'Recherche de zone', 'Recherche de la zone', 'Apprentissage de zone',
+        'Sortie de la limite virtuelle', 'Déplacement vers la zone', 'Franchissement de bordure',
+        'Exploration de la pelouse', 'Contrôle à distance',
+    );
 
     // Notification « fin de tonte » : seulement les jours où le planificateur
     // a réellement lancé une tonte. Envoyée une seule fois, à
@@ -1132,19 +1138,21 @@ class LandroidRTKScheduler {
             if ($now < $started + $duration + self::MOW_END_MARGIN_MIN * 60) {
                 return;
             }
-            // Le robot doit être à la station : sinon on attend son prochain
-            // retour (vérifié à chaque cycle). Statut inconnu : on envoie.
+            // On n'attend que si le robot travaille encore (tonte, départ,
+            // retour...) : on repasse à chaque cycle. À la station, en erreur,
+            // en pause, inactif ou de statut inconnu : on envoie tout de suite.
             // Au-delà de 12 h de retard, on abandonne cette notification.
             $status_cmd = $eqLogic->getCmd(null, 'status');
             $status_val = is_object($status_cmd) ? trim((string) $status_cmd->execCmd()) : '';
             $due = $started + $duration + self::MOW_END_MARGIN_MIN * 60;
-            if ($status_val !== '' && !in_array($status_val, array('Dans la station', 'En charge'), true)) {
+            if (in_array($status_val, self::ACTIVE_STATUS_LABELS, true)) {
                 if ($now - $due < self::MOW_END_MAX_WAIT_S) {
+                    log::add('LandroidRTK', 'debug', 'Scheduler (' . $eqLogic->getHumanName() . '): fin de tonte en attente, statut du robot : « ' . $status_val . ' ».');
                     return;
                 }
                 $state['mow_end_pending'] = null;
                 self::saveState($eqLogic, $state);
-                log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte abandonnée (robot toujours hors de la station 12 h après l\'heure prévue).');
+                log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte abandonnée (robot toujours en activité 12 h après l\'heure prévue).');
                 return;
             }
             $state['mow_end_pending'] = null;
@@ -1184,6 +1192,7 @@ class LandroidRTKScheduler {
             } else {
                 log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): carte non jointe à la notification de fin de tonte (' . $png['reason'] . '), texte seul.');
             }
+            log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte envoyée (statut du robot : « ' . $status_val . ' », image ' . ($files ? 'jointe' : 'absente') . ').');
             self::sendNotifications($config, strtoupper($eqLogic->getName()) . ' - FIN DE TONTE', $msg['html'], $msg['plain'], 'mow_end', $files);
         } catch (\Throwable $e) {
             log::add('LandroidRTK', 'error', 'Scheduler: notification de fin de tonte : ' . get_class($e) . ': ' . $e->getMessage());
@@ -1193,6 +1202,9 @@ class LandroidRTKScheduler {
     public static function evaluate($eqLogic) {
         $config = self::getConfig($eqLogic);
         self::syncWidgetCommands($eqLogic); // garde le widget à jour même si désactivé
+        // Notification de fin de tonte : vérifiée à chaque passage du cron,
+        // même si la programmation a été désactivée entre-temps.
+        self::checkMowEnd($eqLogic, $config);
         if (empty($config['enabled']) || $config['enabled'] != '1') {
             return;
         }
@@ -1479,6 +1491,7 @@ class LandroidRTKScheduler {
         $state['last_mow_date'] = $today;
         $state['current_mow_started_at'] = $now;
         $state['mow_end_pending'] = $now;
+        log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte prévue vers ' . date('H:i', $now + max(60, intval($config['mow_duration_minutes']) * 60) + self::MOW_END_MARGIN_MIN * 60) . ' (si la case est cochée).');
         $state['last_notification_reason'] = null;
         self::saveState($eqLogic, $state);
 

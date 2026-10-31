@@ -417,6 +417,7 @@ class LandroidRTK extends eqLogic {
         if (isset($data['party_mode_enabled']) && $data['party_mode_enabled'] !== null) {
             $this->checkAndUpdateCmd('party_mode', $data['party_mode_enabled'] ? 'Activé' : 'Désactivé');
         }
+        self::logDockTransition($this, $data);
         self::rememberRtkPosition($this, $data);
 
         if (!empty($data['error_active'])) {
@@ -755,6 +756,40 @@ class LandroidRTK extends eqLogic {
             }
         }
         return array('ok' => false, 'path' => null, 'reason' => $reason);
+    }
+
+    /**
+     * Journalise (niveau info) chaque sortie et chaque retour du robot à la
+     * station, avec la durée passée dehors : pratique pour connaître la
+     * durée réelle d'une tonte. Aucune coordonnée dans le message.
+     */
+    public static function logDockTransition($eqLogic, $data) {
+        try {
+            if (!is_array($data) || !isset($data['status_label']) || !is_string($data['status_label']) || $data['status_label'] === '') {
+                return;
+            }
+            $label = $data['status_label'];
+            $docked = in_array($label, array('Dans la station', 'En charge'), true);
+            $key = 'LandroidRTK::dock::' . intval($eqLogic->getId());
+            $prev = json_decode((string) cache::byKey($key)->getValue('{}'), true);
+            $now = time();
+            if (!is_array($prev) || !isset($prev['docked'])) {
+                cache::set($key, json_encode(array('docked' => $docked, 'ts' => $now)));
+                return;
+            }
+            if ($prev['docked'] === $docked) {
+                return;
+            }
+            if ($docked) {
+                $min = max(0, intval(round(($now - intval($prev['ts'])) / 60)));
+                log::add('LandroidRTK', 'info', $eqLogic->getHumanName() . ' : robot rentré à la station (statut « ' . $label . ' ») après ' . $min . ' min hors de la station (sorti à ' . date('H:i', intval($prev['ts'])) . ').');
+            } else {
+                log::add('LandroidRTK', 'info', $eqLogic->getHumanName() . ' : robot sorti de la station (statut « ' . $label . ' »).');
+            }
+            cache::set($key, json_encode(array('docked' => $docked, 'ts' => $now)));
+        } catch (\Throwable $e) {
+            log::add('LandroidRTK', 'debug', 'logDockTransition(): ' . get_class($e) . ': ' . $e->getMessage());
+        }
     }
 
     private static function validPos($pos) {
@@ -1144,6 +1179,7 @@ class LandroidRTK extends eqLogic {
         if (isset($data['party_mode_enabled']) && $data['party_mode_enabled'] !== null) {
             $eqLogic->checkAndUpdateCmd('party_mode', $data['party_mode_enabled'] ? 'Activé' : 'Désactivé');
         }
+        self::logDockTransition($eqLogic, $data);
         self::rememberRtkPosition($eqLogic, $data);
         self::rememberMapStatus($eqLogic, isset($data['map_status']) ? $data['map_status'] : null);
 
