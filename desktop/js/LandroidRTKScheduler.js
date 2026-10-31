@@ -15,6 +15,7 @@ var LandroidRTKScheduler_currentEqLogicId = null;
         if (_eqLogic && _eqLogic.id) {
             LandroidRTKScheduler_currentEqLogicId = _eqLogic.id;
             LandroidRTKScheduler_loadConfig(_eqLogic.id);
+            LandroidRTKScheduler_refreshTiming();
             LandroidRTKScheduler_updateNotifTitlePlaceholder(_eqLogic.name);
         }
     };
@@ -122,6 +123,8 @@ function LandroidRTKScheduler_fillForm(_config) {
     $('#sched_time_end_cmd_id').val(_config.time_end_cmd_id || '1700');
     $('#sched_margin_minutes').val(_config.margin_minutes != null ? _config.margin_minutes : 0);
     $('#sched_mow_duration_minutes').val(_config.mow_duration_minutes != null ? _config.mow_duration_minutes : 120);
+    $('#sched_timing_settle_minutes').val(_config.timing_settle_minutes != null ? _config.timing_settle_minutes : 30);
+    LandroidRTKScheduler_refreshSettlePreview();
     $('#sched_spacing_days').val(_config.spacing_days || 1);
 
     $('#sched_rain_own_enabled').prop('checked', _config.rain_own_enabled == '1');
@@ -429,6 +432,7 @@ function LandroidRTKScheduler_buildConfig() {
         time_end_cmd_id: $('#sched_time_end_cmd_id').val(),
         margin_minutes: $('#sched_margin_minutes').val(),
         mow_duration_minutes: $('#sched_mow_duration_minutes').val(),
+        timing_settle_minutes: $('#sched_timing_settle_minutes').val(),
         spacing_days: $('#sched_spacing_days').val(),
         rain_own_enabled: $('#sched_rain_own_enabled').is(':checked') ? '1' : '0',
         rain_extra_cmd_id: $('#sched_rain_extra_cmd_id').val(),
@@ -694,3 +698,83 @@ $(document).on('click', '#bt_resetNotifThrottle', function (e) {
         }
     });
 });
+
+
+/* ------------------------------------------------------------------ */
+/* Mesure du temps de tonte                                            */
+/* ------------------------------------------------------------------ */
+function LandroidRTKScheduler_fmtDur(sec) {
+    var m = Math.round(sec / 60);
+    return m >= 60 ? (Math.floor(m / 60) + ' h ' + ('0' + (m % 60)).slice(-2)) : (m + ' min');
+}
+function LandroidRTKScheduler_fmtDate(ts) {
+    var d = new Date(ts * 1000);
+    var p = function (n) { return ('0' + n).slice(-2); };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function LandroidRTKScheduler_renderTiming(r) {
+    var $b = $('#table_timing tbody').empty();
+    (r.history || []).forEach(function (h) {
+        $b.append($('<tr>')
+            .append($('<td>').text(LandroidRTKScheduler_fmtDate(h.start)))
+            .append($('<td>').text(h.angle === null || h.angle === undefined ? '?' : h.angle + '°'))
+            .append($('<td>').text(LandroidRTKScheduler_fmtDur(h.out_s)))
+            .append($('<td>').text(LandroidRTKScheduler_fmtDur(h.total_s)))
+            .append($('<td>').text(Math.max(0, (h.returns || 1) - 1))));
+    });
+    if (!(r.history || []).length) {
+        $b.append($('<tr>').append($('<td colspan="5" class="text-muted">').text('{{Aucune mesure pour le moment.}}')));
+    }
+    $('#bt_timingStart').toggle(!r.running);
+    $('#bt_timingCancel').toggle(!!r.running);
+    $('#timing_status').text(r.running
+        ? '{{Mesure en cours depuis}} ' + LandroidRTKScheduler_fmtDate(r.started_at) + (r.angle ? ' ({{angle}} ' + r.angle + '°)' : '') + ' — ' + r.returns + ' {{retour(s) à la station}}' + (r.docked ? ', {{actuellement à la station}}' : '')
+        : '');
+}
+function LandroidRTKScheduler_timingCall(action, done) {
+    if (!LandroidRTKScheduler_currentEqLogicId) { return; }
+    $.ajax({
+        type: 'POST',
+        url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
+        data: {action: action, id: LandroidRTKScheduler_currentEqLogicId, apikey: LandroidRTKApikey},
+        dataType: 'json',
+        error: function (request, status, error) { handleAjaxError(request, status, error); },
+        success: function (data) {
+            if (data.state != 'ok') {
+                $.fn.showAlert({message: data.result || '{{Échec (voir logs LandroidRTK)}}', level: 'danger'});
+                return;
+            }
+            LandroidRTKScheduler_renderTiming(data.result);
+            if (done) { done(); }
+        }
+    });
+}
+function LandroidRTKScheduler_refreshTiming() { LandroidRTKScheduler_timingCall('timingInfo'); }
+setInterval(function () { if ($('#table_timing').is(':visible')) { LandroidRTKScheduler_refreshTiming(); } }, 60000);
+
+$(document).on('click', '#bt_timingStart', function (e) {
+    e.preventDefault();
+    if (!confirm('{{ATTENTION : ceci LANCE IMMÉDIATEMENT le robot (avec les notifications de départ). Ne le relancez pas ensuite à la main : la mesure part de ce clic. Les conditions météo / humidité / horaires ne sont pas vérifiées. Continuer ?}}')) {
+        return;
+    }
+    LandroidRTKScheduler_timingCall('startTiming', function () {
+        $.fn.showAlert({message: '{{Robot lancé : mesure en cours.}}', level: 'warning'});
+    });
+});
+$(document).on('click', '#bt_timingCancel', function (e) {
+    e.preventDefault();
+    if (!confirm('{{Annuler la mesure en cours ? (le robot n\'est pas arrêté)}}')) { return; }
+    LandroidRTKScheduler_timingCall('cancelTiming');
+});
+
+function LandroidRTKScheduler_refreshSettlePreview() {
+    var raw = $('#sched_timing_settle_minutes').val();
+    var v = parseInt(raw, 10);
+    var $p = $('#sched_timing_settle_preview');
+    if (raw === '' || isNaN(v) || String(v) !== String(raw).trim() || v < 0 || v > 60) {
+        $p.html('<span style="color:#a94442;"><i class="fas fa-times-circle"></i> {{Entre 0 et 60 minutes}}</span>');
+    } else {
+        $p.html('<span style="color:#3c763d;"><i class="fas fa-check-circle"></i> ' + (v === 0 ? '{{Fin dès que le robot est chargé à 100 %}}' : '{{Fin si le robot ne repart pas pendant}} ' + v + ' min') + '</span>');
+    }
+}
+$(document).on('change keyup input', '#sched_timing_settle_minutes', LandroidRTKScheduler_refreshSettlePreview);

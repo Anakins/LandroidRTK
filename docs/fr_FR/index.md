@@ -22,6 +22,7 @@ Ce plugin ne gère **volontairement pas** les anciens modèles Worx (déjà couv
 - **Widget** : les informations du haut sont à gauche, une mini carte du jardin (position du robot et trace du jour) est à droite. Elle se rafraîchit toute seule toutes les 30 secondes. Option « Masquer la carte du widget » dans la configuration de l'équipement.
 - **Onglet Carte** : plan du jardin, position du robot et passages du jour. Le démon doit tourner.
 - **Notification de fin de tonte** : case « Reçoit « fin de tonte » » (carte envoyée au format PNG) dans les notifications du planificateur. Bouton « Enregistrer l'image (PNG) » dans l'onglet Carte.
+- **Mesure du temps de tonte** (onglet Programmation) : le bouton lance le robot, ne pas le relancer ensuite. Tableau des 10 dernières mesures avec l'angle.
 - **Exporter les données de diagnostic** (onglet Carte) : zip anonymisé pour signaler un problème.
 - Les statuts et erreurs sont traduits en français.
 

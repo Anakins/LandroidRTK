@@ -8,6 +8,7 @@ Modes :
     list                        Liste les tondeuses "Vision" du compte (JSON)
     status <serial>             Statut détaillé d'une tondeuse (JSON)
     dump <serial> <dossier>     Export de diagnostic anonymisé (zip) dans <dossier>
+    raw <serial> [brut]         Statut + toutes les données brutes (cfg, dat, attributs), anonymisées sauf si « brut »
     action <cmd> <serial>       Exécute une action (start/pause/home/edge)
 
 Authentification :
@@ -348,6 +349,25 @@ def _public_attributes(device):
     return out
 
 
+def raw_snapshot(device, anonymize=True):
+    """Toutes les données disponibles du robot à cet instant (sans la carte)."""
+    parts = {
+        "cfg": getattr(device, "raw_cfg", None),
+        "dat": getattr(device, "raw_dat", None),
+        "device": _public_attributes(device),
+        "status": device_status(device),
+    }
+    parts = {name: worx_map._jsonable(value) for name, value in parts.items()}
+    if anonymize:
+        # Position précise du robot : déjà présente (décalée) dans « dat », on ne la répète pas ici.
+        parts["status"] = dict(parts["status"], rtk_pos=None, rtk_map_id=None)
+        origin = worx_map.find_origin(parts["dat"]) or worx_map.find_origin(parts["cfg"]) or worx_map.find_origin(parts["status"])
+        parts = {name: worx_map.anonymize(value, origin) for name, value in parts.items()}
+    parts["anonymise"] = bool(anonymize)
+    parts["date"] = datetime.now().isoformat(timespec="seconds")
+    return parts
+
+
 async def dump_diagnostic(cloud, device, outdir, anonymize=True):
     """Écrit un export de diagnostic (zip) dans `outdir`.
 
@@ -487,6 +507,12 @@ async def run():
             await cloud.update(serial)
             result = await dump_diagnostic(cloud, devices[target_key], outdir)
             print(json.dumps(result, ensure_ascii=False))
+            return
+
+        if mode == "raw":
+            await cloud.update(serial)
+            brut = len(sys.argv) > 3 and sys.argv[3] == "brut"
+            print(json.dumps(raw_snapshot(devices[target_key], anonymize=not brut), ensure_ascii=False, default=str))
             return
 
         if mode == "status":

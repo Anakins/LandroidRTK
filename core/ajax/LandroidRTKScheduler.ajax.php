@@ -147,6 +147,20 @@ try {
         ajax::success(true);
     }
 
+    if (init('action') == 'startTiming' || init('action') == 'cancelTiming' || init('action') == 'timingInfo') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic)) {
+            throw new Exception('Équipement introuvable');
+        }
+        if (init('action') == 'startTiming') {
+            ajax::success(LandroidRTKScheduler::startTiming($eqLogic));
+        }
+        if (init('action') == 'cancelTiming') {
+            LandroidRTKScheduler::cancelTiming($eqLogic);
+        }
+        ajax::success(LandroidRTKScheduler::timingInfo($eqLogic));
+    }
+
     if (init('action') == 'nextMowEstimate') {
         $eqLogic = eqLogic::byId(init('id'));
         if (!is_object($eqLogic)) {

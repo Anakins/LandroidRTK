@@ -769,6 +769,7 @@ class LandroidRTK extends eqLogic {
                 return;
             }
             $label = $data['status_label'];
+            LandroidRTKScheduler::trackTiming($eqLogic, $label, isset($data['battery_percent']) ? $data['battery_percent'] : null);
             $docked = in_array($label, array('Dans la station', 'En charge'), true);
             $key = 'LandroidRTK::dock::' . intval($eqLogic->getId());
             $prev = json_decode((string) cache::byKey($key)->getValue('{}'), true);

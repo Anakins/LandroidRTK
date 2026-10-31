@@ -45,6 +45,31 @@ if (!isConnect()) {
         </div>
     </div>
 
+    <div class="alert alert-default" style="margin:10px; border:1px solid #ddd;" id="timing_box">
+        <strong><i class="fas fa-stopwatch"></i> Mesure du temps de tonte</strong>
+        <div class="alert alert-danger" style="margin:8px 0;">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>Le bouton ci-dessous LANCE IMMÉDIATEMENT le robot</strong>, avec les notifications de départ habituelles (qui précisent qu'il s'agit d'une mesure : météo, humidité et horaires ne sont pas vérifiés). <strong>Ne le relancez pas ensuite à la main</strong> : la mesure part du clic. Elle se termine quand le robot est revenu à la station, chargé à 100 %, et n'en est pas reparti pendant l'attente réglée ci-dessous (il peut revenir se charger une ou deux fois avant de finir). Le robot doit être à la station.
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <label style="margin:0;">Attente à la station, chargé à 100 %, avant de conclure :</label>
+            <input type="number" id="sched_timing_settle_minutes" class="form-control" min="0" max="60" style="width:80px;">
+            <span>min (0 à 60)</span>
+            <span id="sched_timing_settle_preview" class="text-muted"></span>
+        </div>
+        <span class="help-block" style="margin-top:0;">Enregistré avec le bouton « Sauvegarder la programmation » en haut de l'onglet. Par défaut : 30 min.</span>
+        <a class="btn btn-warning btn-sm" id="bt_timingStart"><i class="fas fa-play"></i> Lancer la mesure du temps de tonte</a>
+        <a class="btn btn-default btn-sm" id="bt_timingCancel" style="display:none;"><i class="fas fa-ban"></i> Annuler la mesure</a>
+        <span id="timing_status" style="margin-left:10px;"></span>
+        <table class="table table-condensed" style="margin-top:10px; margin-bottom:0;" id="table_timing">
+            <thead>
+                <tr><th>Date</th><th>Angle</th><th>Tonte (hors station)</th><th>Durée totale</th><th>Recharges en cours de tonte</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <span class="help-block" style="margin-bottom:0;">Les 10 dernières mesures sont conservées, avec l'angle de coupe réglé au moment du lancement : changez l'angle dans la tondeuse entre deux mesures pour les comparer.</span>
+    </div>
+
     <div id="schedule_errors" class="alert alert-danger" style="display:none; margin:10px;"></div>
 
     <form class="form-horizontal" id="schedule_form">

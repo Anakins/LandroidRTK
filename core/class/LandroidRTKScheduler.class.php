@@ -335,6 +335,8 @@ class LandroidRTKScheduler {
             'time_end_cmd_id' => '',
             'margin_minutes' => '0',
             'mow_duration_minutes' => '120',
+            // Mesure du temps de tonte : attente à la station, chargé à 100 %, avant de conclure.
+            'timing_settle_minutes' => '30',
             'spacing_days' => '1',
             // Pluie : 2 emplacements fixes, pas une liste.
             // 1) Le capteur pluie natif du robot (lecture seule, juste
@@ -457,6 +459,9 @@ class LandroidRTKScheduler {
         }
         if (!is_numeric($config['mow_duration_minutes']) || $config['mow_duration_minutes'] < 30 || $config['mow_duration_minutes'] > 360) {
             $errors[] = "La durée de tonte estimée doit être comprise entre 30 et 360 minutes (6h).";
+        }
+        if (!is_numeric($config['timing_settle_minutes']) || $config['timing_settle_minutes'] < 0 || $config['timing_settle_minutes'] > 60) {
+            $errors[] = "L'attente à 100 % de la mesure du temps de tonte doit être comprise entre 0 et 60 minutes.";
         }
         if (!is_numeric($config['spacing_days']) || $config['spacing_days'] < 1 || $config['spacing_days'] > 28) {
             $errors[] = "L'espacement entre 2 tontes doit être compris entre 1 et 28 jours.";
@@ -1164,26 +1169,7 @@ class LandroidRTKScheduler {
                 "🏁 La période de tonte paramétrée de {$eqLogic->getName()} vient de s'achever.",
                 "⏱️ Départ à " . date('H:i', $started) . ', durée de tonte ' . intval($config['mow_duration_minutes']) . ' min + ' . self::MOW_END_MARGIN_MIN . ' min de marge.',
             );
-            if (!empty($config['condition_id_cmd_id'])) {
-                $condition_id = self::getCmdValue($config['condition_id_cmd_id']);
-                $parts[] = self::getEmoji($condition_id) . ' ' . self::getConditionLabel($config);
-            }
-            if (!empty($config['temperature_cmd_id'])) {
-                $temp_val = self::getTemperatureValue($config);
-                if ($temp_val !== null && $temp_val !== '') {
-                    $parts[] = "🌡️ La température est de {$temp_val}°C.";
-                }
-            }
-            if (!empty($config['humidity_cmd_id'])) {
-                $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
-                if ($humidity_val !== null && $humidity_val !== '') {
-                    $parts[] = "💧 L'humidité est de {$humidity_val}%.";
-                }
-            }
-            $battery_val = self::getBatteryValue($eqLogic);
-            if (is_numeric($battery_val)) {
-                $parts[] = "🔋 Batterie : {$battery_val}%.";
-            }
+            $parts = array_merge($parts, self::recapParts($eqLogic, $config));
             $msg = self::buildDualMessage($parts);
             $files = array();
             $png = $eqLogic->saveMapPng();
@@ -1199,12 +1185,243 @@ class LandroidRTKScheduler {
         }
     }
 
+    // Lignes de récapitulatif communes aux notifications : météo, température,
+    // humidité, batterie (valeurs actuelles).
+    private static function recapParts($eqLogic, $config) {
+        $parts = array();
+        if (!empty($config['condition_id_cmd_id'])) {
+            $condition_id = self::getCmdValue($config['condition_id_cmd_id']);
+            $parts[] = self::getEmoji($condition_id) . ' ' . self::getConditionLabel($config);
+        }
+        if (!empty($config['temperature_cmd_id'])) {
+            $temp_val = self::getTemperatureValue($config);
+            if ($temp_val !== null && $temp_val !== '') {
+                $parts[] = "🌡️ La température est de {$temp_val}°C.";
+            }
+        }
+        if (!empty($config['humidity_cmd_id'])) {
+            $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
+            if ($humidity_val !== null && $humidity_val !== '') {
+                $parts[] = "💧 L'humidité est de {$humidity_val}%.";
+            }
+        }
+        $battery_val = self::getBatteryValue($eqLogic);
+        if (is_numeric($battery_val)) {
+            $parts[] = "🔋 Batterie : {$battery_val}%.";
+        }
+        return $parts;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Mesure du temps de tonte (lancée à la main depuis l'onglet)        */
+    /* ---------------------------------------------------------------- */
+
+    // Attente à la station, chargé à 100 %, avant de conclure la mesure : réglable (0 à 60 min, 30 par défaut).
+    private static function timingSettleS($eqLogic) {
+        $c = self::getConfig($eqLogic);
+        $m = is_numeric($c['timing_settle_minutes']) ? intval($c['timing_settle_minutes']) : 30;
+        return max(0, min(60, $m)) * 60;
+    }
+    const TIMING_MAX_S = 43200;         // abandon d'une mesure après 12 h
+    const TIMING_LEAVE_MAX_S = 600;     // le robot doit avoir quitté la station dans les 10 min
+    const TIMING_DOCKED_MAX_S = 10800;  // à la station depuis 3 h sans repartir : fini, même sans 100 %
+    const TIMING_HISTORY_MAX = 10;
+    const DOCKED_LABELS = array('Dans la station', 'En charge');
+
+    private static function readJsonConfig($eqLogic, $key, $default) {
+        $v = json_decode((string) $eqLogic->getConfiguration($key, ''), true);
+        return is_array($v) ? $v : $default;
+    }
+
+    private static function saveJsonConfig($eqLogic, $key, $value) {
+        $eqLogic->setConfiguration($key, json_encode($value));
+        $eqLogic->save();
+    }
+
+    public static function getTimingHistory($eqLogic) {
+        return self::readJsonConfig($eqLogic, 'mowing_timing_history', array());
+    }
+
+    private static function fmtDuration($s) {
+        $m = intval(round($s / 60));
+        return $m >= 60 ? (intval($m / 60) . ' h ' . sprintf('%02d', $m % 60)) : ($m . ' min');
+    }
+
+    /** Mesure en cours + historique, pour l'onglet. */
+    public static function timingInfo($eqLogic) {
+        $t = self::readJsonConfig($eqLogic, 'mowing_timing', array());
+        $running = !empty($t['running']);
+        return array(
+            'running' => $running,
+            'started_at' => $running ? intval($t['started_at']) : null,
+            'angle' => $running && isset($t['angle']) ? $t['angle'] : null,
+            'returns' => $running ? intval($t['returns']) : 0,
+            'docked' => $running ? !empty($t['docked']) : null,
+            'history' => self::getTimingHistory($eqLogic),
+            'now' => time(),
+        );
+    }
+
+    /**
+     * Lance le robot et démarre la mesure à cet instant. Envoie les
+     * notifications de départ habituelles, avec la mention « mesure ».
+     */
+    public static function startTiming($eqLogic) {
+        $t = self::readJsonConfig($eqLogic, 'mowing_timing', array());
+        if (!empty($t['running'])) {
+            throw new Exception('Une mesure est déjà en cours (depuis ' . date('H:i', intval($t['started_at'])) . '). Annulez-la d\'abord si nécessaire.');
+        }
+        $status_cmd = $eqLogic->getCmd(null, 'status');
+        $status_val = is_object($status_cmd) ? trim((string) $status_cmd->execCmd()) : '';
+        if (!in_array($status_val, self::DOCKED_LABELS, true)) {
+            throw new Exception('Le robot doit être à la station pour lancer une mesure (statut actuel : « ' . $status_val . ' »).');
+        }
+        $config = self::getConfig($eqLogic);
+        $angle_cmd = $eqLogic->getCmd(null, 'angle');
+        $angle = is_object($angle_cmd) ? trim((string) $angle_cmd->execCmd()) : '';
+        $now = time();
+
+        $t = array('running' => true, 'started_at' => $now, 'angle' => ($angle === '' ? null : $angle),
+            'left' => false, 'docked' => true, 'out_ts' => $now, 'out_total' => 0, 'returns' => 0,
+            'last_return' => null, 'full_since' => null);
+        self::saveJsonConfig($eqLogic, 'mowing_timing', $t);
+
+        $parts = array(
+            "⏱️ Mesure du temps de tonte lancée à la demande (bouton du plugin). Les conditions habituelles (météo, humidité, horaires) n'ont PAS été vérifiées : elles peuvent ne pas être réunies.",
+            "✂️ {$eqLogic->getName()} va tondre la pelouse.",
+        );
+        if ($t['angle'] !== null) {
+            $parts[] = '📐 Angle de coupe : ' . $t['angle'] . '°.';
+        }
+        $parts = array_merge($parts, self::recapParts($eqLogic, $config));
+        $msg = self::buildDualMessage($parts);
+
+        if (!$eqLogic->doAction('start')) {
+            self::saveJsonConfig($eqLogic, 'mowing_timing', array());
+            throw new Exception('Le robot n\'a pas pu être lancé (voir les logs LandroidRTK). Aucune mesure en cours.');
+        }
+        self::sendNotifications($config, strtoupper($eqLogic->getName()) . ' - MESURE DU TEMPS DE TONTE', $msg['html'], $msg['plain']);
+
+        // Cette tonte compte comme celle du jour : le planificateur ne repart pas en plus.
+        $state = self::getState($eqLogic);
+        $state['last_mow_date'] = date('Y-m-d', $now);
+        $state['current_mow_started_at'] = $now;
+        $state['mow_end_pending'] = null;
+        self::saveState($eqLogic, $state);
+        log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): mesure du temps de tonte lancée (angle ' . ($t['angle'] === null ? '?' : $t['angle'] . '°') . ').');
+        return self::timingInfo($eqLogic);
+    }
+
+    public static function cancelTiming($eqLogic, $reason = 'annulée') {
+        $t = self::readJsonConfig($eqLogic, 'mowing_timing', array());
+        if (empty($t['running'])) {
+            return;
+        }
+        self::saveJsonConfig($eqLogic, 'mowing_timing', array());
+        log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): mesure du temps de tonte ' . $reason . '.');
+    }
+
+    /** Appelée avec le statut courant du robot (démon, rafraîchissement, cron). */
+    public static function trackTimingFromCmds($eqLogic) {
+        $status_cmd = $eqLogic->getCmd(null, 'status');
+        $bat_cmd = $eqLogic->getCmd(null, 'battery');
+        self::trackTiming($eqLogic, is_object($status_cmd) ? trim((string) $status_cmd->execCmd()) : '',
+            is_object($bat_cmd) ? $bat_cmd->execCmd() : null);
+    }
+
+    public static function trackTiming($eqLogic, $label, $battery) {
+        try {
+            $t = self::readJsonConfig($eqLogic, 'mowing_timing', array());
+            if (empty($t['running']) || !is_string($label) || $label === '') {
+                return;
+            }
+            $now = time();
+            $started = intval($t['started_at']);
+            if ($now - $started > self::TIMING_MAX_S) {
+                self::cancelTiming($eqLogic, 'abandonnée (plus de 12 h)');
+                return;
+            }
+            $docked = in_array($label, self::DOCKED_LABELS, true);
+            $full = is_numeric($battery) && floatval($battery) >= 100;
+            $changed = false;
+
+            if (empty($t['left'])) {
+                if (!$docked) {
+                    $t['left'] = true;
+                    $t['docked'] = false;
+                    $changed = true;
+                } elseif ($now - $started > self::TIMING_LEAVE_MAX_S) {
+                    self::cancelTiming($eqLogic, 'abandonnée (le robot n\'a pas quitté la station)');
+                    return;
+                }
+            } elseif ($docked && empty($t['docked'])) {
+                $t['returns'] = intval($t['returns']) + 1;
+                $t['out_total'] = intval($t['out_total']) + ($now - intval($t['out_ts']));
+                $t['last_return'] = $now;
+                $t['docked'] = true;
+                $t['full_since'] = $full ? $now : null;
+                $changed = true;
+            } elseif (!$docked && !empty($t['docked'])) {
+                $t['docked'] = false;
+                $t['out_ts'] = $now;
+                $t['full_since'] = null;
+                $changed = true;
+            } elseif ($docked) {
+                if (empty($t['full_since']) && $full) {
+                    $t['full_since'] = $now;
+                    $changed = true;
+                }
+                if ((!empty($t['full_since']) && $now - intval($t['full_since']) >= self::timingSettleS($eqLogic))
+                    || ($now - intval($t['last_return']) >= self::TIMING_DOCKED_MAX_S)) {
+                    self::finishTiming($eqLogic, $t);
+                    return;
+                }
+            }
+            if ($changed) {
+                self::saveJsonConfig($eqLogic, 'mowing_timing', $t);
+            }
+        } catch (\Throwable $e) {
+            log::add('LandroidRTK', 'error', 'trackTiming(): ' . get_class($e) . ': ' . $e->getMessage());
+        }
+    }
+
+    private static function finishTiming($eqLogic, $t) {
+        $started = intval($t['started_at']);
+        $last = intval($t['last_return']);
+        $entry = array('start' => $started, 'end' => $last, 'angle' => $t['angle'],
+            'total_s' => max(0, $last - $started), 'out_s' => intval($t['out_total']), 'returns' => intval($t['returns']));
+        $history = self::getTimingHistory($eqLogic);
+        array_unshift($history, $entry);
+        $history = array_slice($history, 0, self::TIMING_HISTORY_MAX);
+        self::saveJsonConfig($eqLogic, 'mowing_timing_history', $history);
+        self::saveJsonConfig($eqLogic, 'mowing_timing', array());
+
+        $recharges = max(0, $entry['returns'] - 1);
+        $parts = array(
+            "⏱️ Mesure du temps de tonte terminée.",
+            '📐 Angle de coupe : ' . ($entry['angle'] === null ? 'inconnu' : $entry['angle'] . '°') . '.',
+            '✂️ Durée de tonte (hors station) : ' . self::fmtDuration($entry['out_s']) . '.',
+            '🕒 Durée totale (départ → dernier retour) : ' . self::fmtDuration($entry['total_s']) . '.',
+            '🔌 Retours à la station : ' . $entry['returns'] . ' (dont ' . $recharges . ' recharge(s) en cours de tonte).',
+            '🏁 Dernier retour à ' . date('H:i', $last) . ', confirmé après ' . intval(self::timingSettleS($eqLogic) / 60) . ' min en charge à 100 %.',
+        );
+        $msg = self::buildDualMessage($parts);
+        $files = array();
+        $png = $eqLogic->saveMapPng();
+        if ($png['ok']) {
+            $files[] = $png['path'];
+        }
+        log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): mesure du temps de tonte terminée : ' . self::fmtDuration($entry['out_s']) . ' hors station, ' . self::fmtDuration($entry['total_s']) . ' au total, ' . $entry['returns'] . ' retour(s).');
+        self::sendNotifications(self::getConfig($eqLogic), strtoupper($eqLogic->getName()) . ' - MESURE DU TEMPS DE TONTE', $msg['html'], $msg['plain'], 'mow_end', $files);
+    }
+
     public static function evaluate($eqLogic) {
         $config = self::getConfig($eqLogic);
         self::syncWidgetCommands($eqLogic); // garde le widget à jour même si désactivé
         // Notification de fin de tonte : vérifiée à chaque passage du cron,
         // même si la programmation a été désactivée entre-temps.
         self::checkMowEnd($eqLogic, $config);
+        self::trackTimingFromCmds($eqLogic);
         if (empty($config['enabled']) || $config['enabled'] != '1') {
             return;
         }
@@ -1290,6 +1507,7 @@ class LandroidRTKScheduler {
                 $state['rain_interrupt_until'] = $now + (intval($config['rain_interrupt_minutes']) * 60);
                 $state['current_mow_started_at'] = null;
                 $state['mow_end_pending'] = null;
+                self::cancelTiming($eqLogic, 'abandonnée (pluie)');
                 $interrupted = true;
             }
             if ($state['last_notification_reason'] != 'rain' || $state['last_notification_date'] != $today) {
