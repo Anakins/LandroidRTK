@@ -1212,6 +1212,10 @@ class LandroidRTK extends eqLogic {
             'rtn' => null,
             'zones' => array(),
             'done_day' => (is_array($prev) && isset($prev['done_day'])) ? $prev['done_day'] : null,
+            // Dernière fois où une tâche de tonte était ouverte, et moment où elle s'est refermée (fin de tonte).
+            // Pendant une recharge en cours de tonte la tâche reste ouverte (p < 100) : seule sa fermeture compte.
+            'last_active' => (is_array($prev) && isset($prev['last_active'])) ? $prev['last_active'] : null,
+            'ended_at' => (is_array($prev) && isset($prev['ended_at'])) ? $prev['ended_at'] : null,
         );
         if (!empty($t['active']) && isset($t['p']) && is_numeric($t['p'])) {
             $state['active'] = true;
@@ -1219,8 +1223,11 @@ class LandroidRTK extends eqLogic {
             $state['rtn'] = (isset($t['rtn']) && is_numeric($t['rtn'])) ? max(0, intval($t['rtn'])) : null;
             $state['zones'] = (isset($t['zones']) && is_array($t['zones'])) ? array_values($t['zones']) : array();
             $state['done_day'] = null;
+            $state['last_active'] = $now;
+            $state['ended_at'] = null;
         } elseif (is_array($prev) && !empty($prev['active'])) {
             $state['done_day'] = date('Ymd', $now);
+            $state['ended_at'] = $now;
         }
         cache::set($key, json_encode($state));
 
@@ -1234,6 +1241,23 @@ class LandroidRTK extends eqLogic {
             $eqLogic->checkAndUpdateCmd('mow_left_min', 0);
             $eqLogic->checkAndUpdateCmd('mow_left_area', 0);
         }
+    }
+
+    /**
+     * Tâche de tonte du robot telle que mémorisée : array('active' => bool, 'last_active' => ts|null, 'ended_at' => ts|null,
+     * 'ts' => dernière mise à jour) ou null si le robot n'a jamais donné de tâche.
+     */
+    public static function progressTask($id) {
+        $s = json_decode((string) cache::byKey('LandroidRTK::prog::' . intval($id))->getValue('null'), true);
+        if (!is_array($s) || !isset($s['ts'])) {
+            return null;
+        }
+        return array(
+            'active' => !empty($s['active']),
+            'last_active' => (isset($s['last_active']) && is_numeric($s['last_active'])) ? intval($s['last_active']) : null,
+            'ended_at' => (isset($s['ended_at']) && is_numeric($s['ended_at'])) ? intval($s['ended_at']) : null,
+            'ts' => intval($s['ts']),
+        );
     }
 
     /**

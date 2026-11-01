@@ -1132,6 +1132,26 @@ class LandroidRTKScheduler {
         'Exploration de la pelouse', 'Contrôle à distance',
     );
 
+    /**
+     * Ce que dit le robot de sa tâche de tonte depuis l'instant $since : 'known' (une tâche ouverte a été vue depuis),
+     * 'active' (tâche encore ouverte : tonte en cours, y compris recharge au milieu), 'ended' (tâche refermée : tonte
+     * terminée), 'ended_at'. Sans information de tâche, 'known' est faux : on retombe sur les durées paramétrées.
+     */
+    public static function taskSince($eqLogic, $since) {
+        $r = array('known' => false, 'active' => false, 'ended' => false, 'ended_at' => null);
+        $s = LandroidRTK::progressTask($eqLogic->getId());
+        if ($s === null || $s['last_active'] === null || $s['last_active'] < intval($since) - 120) {
+            return $r;
+        }
+        $r['known'] = true;
+        $r['active'] = $s['active'];
+        if (!$s['active'] && $s['ended_at'] !== null && $s['ended_at'] >= $s['last_active']) {
+            $r['ended'] = true;
+            $r['ended_at'] = $s['ended_at'];
+        }
+        return $r;
+    }
+
     // Notification « fin de tonte » : seulement les jours où le planificateur
     // a réellement lancé une tonte. Envoyée une seule fois, à
     // départ + durée de tonte paramétrée + 30 min, avec la carte en PNG si
@@ -1145,13 +1165,37 @@ class LandroidRTKScheduler {
             $started = intval($state['mow_end_pending']);
             $now = time();
             $duration = max(60, intval($config['mow_duration_minutes']) * 60);
-            if ($now < $started + $duration + self::MOW_END_MARGIN_MIN * 60) {
+
+            // Automatique : le robot indique lui-même si la tâche de tonte est terminée (pourcentage tondu, tâche
+            // refermée). Une recharge au milieu de la tonte laisse la tâche ouverte : pas de fausse fin. Les durées
+            // paramétrées ne servent que si le robot ne donne aucune information de tâche.
+            $task = self::taskSince($eqLogic, $started);
+            $auto = false;
+            if ($task['known']) {
+                if ($now - $started >= self::MOW_END_MAX_WAIT_S) {
+                    $state['mow_end_pending'] = null;
+                    self::saveState($eqLogic, $state);
+                    log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte abandonnée (tâche de tonte toujours ouverte 12 h après le départ).');
+                    return;
+                }
+                if ($task['active']) {
+                    log::add('LandroidRTK', 'debug', 'Scheduler (' . $eqLogic->getHumanName() . '): fin de tonte en attente, la tâche de tonte du robot est encore ouverte.');
+                    return;
+                }
+                $st_cmd = $eqLogic->getCmd(null, 'status');
+                $st_val = is_object($st_cmd) ? trim((string) $st_cmd->execCmd()) : '';
+                if (in_array($st_val, self::ACTIVE_STATUS_LABELS, true)) {
+                    return;   // tâche refermée mais le robot rentre encore : on attend qu'il soit posé
+                }
+                $auto = true;
+            }
+            if (!$auto && $now < $started + $duration + self::MOW_END_MARGIN_MIN * 60) {
                 return;
             }
             // Notification périmée (plus de 12 h après l'heure prévue, par exemple
             // après une mise à jour du plugin ou un Jeedom arrêté) : on l'abandonne
             // sans rien envoyer, la carte du jour ne correspondrait plus à cette tonte.
-            if ($now - ($started + $duration + self::MOW_END_MARGIN_MIN * 60) >= self::MOW_END_MAX_WAIT_S) {
+            if (!$auto && $now - ($started + $duration + self::MOW_END_MARGIN_MIN * 60) >= self::MOW_END_MAX_WAIT_S) {
                 $state['mow_end_pending'] = null;
                 self::saveState($eqLogic, $state);
                 log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte abandonnée (plus de 12 h après l\'heure prévue).');
@@ -1164,7 +1208,7 @@ class LandroidRTKScheduler {
             $status_cmd = $eqLogic->getCmd(null, 'status');
             $status_val = is_object($status_cmd) ? trim((string) $status_cmd->execCmd()) : '';
             $due = $started + $duration + self::MOW_END_MARGIN_MIN * 60;
-            if (in_array($status_val, self::ACTIVE_STATUS_LABELS, true)) {
+            if (!$auto && in_array($status_val, self::ACTIVE_STATUS_LABELS, true)) {
                 if ($now - $due < self::MOW_END_MAX_WAIT_S) {
                     log::add('LandroidRTK', 'debug', 'Scheduler (' . $eqLogic->getHumanName() . '): fin de tonte en attente, statut du robot : « ' . $status_val . ' ».');
                     return;
@@ -1179,10 +1223,17 @@ class LandroidRTKScheduler {
 
             // Même récapitulatif que la notification de départ : météo,
             // température, humidité, batterie (valeurs actuelles).
-            $parts = array(
-                "🏁 La période de tonte paramétrée de {$eqLogic->getName()} vient de s'achever.",
-                "⏱️ Départ à " . date('H:i', $started) . ', durée de tonte ' . intval($config['mow_duration_minutes']) . ' min + ' . self::MOW_END_MARGIN_MIN . ' min de marge.',
-            );
+            if ($auto) {
+                $parts = array(
+                    "🏁 {$eqLogic->getName()} a terminé la tonte.",
+                    "⏱️ Départ à " . date('H:i', $started) . ', fin à ' . date('H:i', $task['ended_at']) . ' (' . self::fmtDuration(max(0, $task['ended_at'] - $started)) . ', recharges comprises).',
+                );
+            } else {
+                $parts = array(
+                    "🏁 La période de tonte paramétrée de {$eqLogic->getName()} vient de s'achever.",
+                    "⏱️ Départ à " . date('H:i', $started) . ', durée de tonte ' . intval($config['mow_duration_minutes']) . ' min + ' . self::MOW_END_MARGIN_MIN . ' min de marge.',
+                );
+            }
             // Forme et angle réglés sur le robot à la fin de la tonte.
             $pattern_line = self::patternLine($eqLogic);
             if ($pattern_line !== null) {
@@ -1197,7 +1248,7 @@ class LandroidRTKScheduler {
             } else {
                 log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): carte non jointe à la notification de fin de tonte (' . $png['reason'] . '), texte seul.');
             }
-            log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte envoyée (statut du robot : « ' . $status_val . ' », image ' . ($files ? 'jointe' : 'absente') . ').');
+            log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte envoyée (' . ($auto ? 'tâche du robot terminée' : 'durée paramétrée écoulée') . ', statut du robot : « ' . $status_val . ' », image ' . ($files ? 'jointe' : 'absente') . ').');
             self::sendNotifications($config, strtoupper($eqLogic->getName()) . ' - FIN DE TONTE', $msg['html'], $msg['plain'], 'mow_end', $files);
         } catch (\Throwable $e) {
             log::add('LandroidRTK', 'error', 'Scheduler: notification de fin de tonte : ' . get_class($e) . ': ' . $e->getMessage());
@@ -1547,6 +1598,9 @@ class LandroidRTKScheduler {
             $docked = in_array($label, self::DOCKED_LABELS, true);
             $full = is_numeric($battery) && floatval($battery) >= 100;
             $changed = false;
+            // Tâche de tonte du robot : tant qu'elle est ouverte, une pause à la station est une recharge ; sa fermeture
+            // marque la vraie fin. Sans information de tâche, on garde la règle « chargé à 100 % et ne repart pas ».
+            $task = self::taskSince($eqLogic, $started);
 
             if (empty($t['left'])) {
                 if (!$docked) {
@@ -1574,8 +1628,13 @@ class LandroidRTKScheduler {
                     $t['full_since'] = $now;
                     $changed = true;
                 }
-                if ((!empty($t['full_since']) && $now - intval($t['full_since']) >= self::timingSettleS($eqLogic))
-                    || ($now - intval($t['last_return']) >= self::TIMING_DOCKED_MAX_S)) {
+                if ($task['known']) {
+                    $finished = $task['ended'] || ($now - intval($t['last_return']) >= self::TIMING_DOCKED_MAX_S);
+                } else {
+                    $finished = (!empty($t['full_since']) && $now - intval($t['full_since']) >= self::timingSettleS($eqLogic))
+                        || ($now - intval($t['last_return']) >= self::TIMING_DOCKED_MAX_S);
+                }
+                if ($finished) {
                     self::finishTiming($eqLogic, $t);
                     return;
                 }

@@ -9,6 +9,10 @@
 - Chaque ligne de la liste affiche, comme les autres champs, un ✔ vert ou un ✖ rouge à droite avec la raison (angle entier de 0 à 359°).
 - **Tableau du temps de tonte : 🗑️ en bout de ligne** pour supprimer une mesure qui ne vous intéresse pas (confirmation demandée).
 - **Annulation de la mesure du temps de tonte renforcée** : une mesure annulée est marquée comme telle ; si un processus (démon, cron) qui avait chargé l'équipement avant le clic réécrivait l'ancien état « en cours », la mesure est supprimée au passage suivant et n'ajoute jamais de ligne à l'historique.
+- **Fin de tonte automatique** (notification de fin et mesure du temps de tonte) : le plugin utilise la tâche de tonte du robot (pourcentage tondu, temps restant) au lieu d'une durée à régler. Relevé réel : pendant une recharge en pleine tonte la tâche reste ouverte (ex. 35 % tondu, temps restant figé) ; la tonte n'est finie que quand le robot referme sa tâche et est posé à la station.
+  - Notification « fin de tonte » : envoyée dès que le robot a fini (« a terminé la tonte », avec départ, fin et durée recharges comprises), plus de fausse fin pendant une recharge. Abandonnée sans message si la tâche reste ouverte 12 h après le départ (ex. pluie, robot bloqué).
+  - Mesure du temps de tonte : se termine dès que la tâche est refermée, sans attendre « chargé à 100 % + N minutes ». Une charge à 100 % avec tâche ouverte n'est plus prise pour la fin.
+  - Repli : si le robot ne fournit pas la tâche, les anciennes règles (durée de tonte estimée + 30 min ; 100 % + attente) s'appliquent comme avant.
 - Redémarrage du démon nécessaire (nouveaux fichiers Python). À installer de préférence robot à la station.
 
 ## 1.12.3 (2026-11-01)

@@ -52,12 +52,12 @@ if (!isConnect()) {
             <strong>Le bouton ci-dessous LANCE IMMÉDIATEMENT le robot</strong>, avec les notifications de départ habituelles (qui précisent qu'il s'agit d'une mesure : météo, humidité et horaires ne sont pas vérifiés). <strong>Ne le relancez pas ensuite à la main</strong> : la mesure part du clic. Elle se termine quand le robot est revenu à la station, chargé à 100 %, et n'en est pas reparti pendant l'attente réglée ci-dessous (il peut revenir se charger une ou deux fois avant de finir). Le robot doit être à la station.
         </div>
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-            <label style="margin:0;">Attente à la station, chargé à 100 %, avant de conclure :</label>
+            <label style="margin:0;">Repli : attente à la station, chargé à 100 %, avant de conclure :</label>
             <input type="number" id="sched_timing_settle_minutes" class="form-control" min="0" max="60" style="width:80px;">
             <span>min (0 à 60)</span>
             <span id="sched_timing_settle_preview" class="text-muted"></span>
         </div>
-        <span class="help-block" style="margin-top:0;">Enregistré avec le bouton « Sauvegarder la programmation » en haut de l'onglet. Par défaut : 30 min.</span>
+        <span class="help-block" style="margin-top:0;">🤖 La fin est détectée <b>automatiquement</b> : tant que le robot indique une tonte en cours (pourcentage restant), une pause à la station est une recharge ; la mesure se termine quand il referme sa tâche de tonte. Ce réglage ne sert que si le robot ne fournit pas cette information. Enregistré avec le bouton « Sauvegarder la programmation » en haut de l'onglet. Par défaut : 30 min.</span>
         <a class="btn btn-warning btn-sm" id="bt_timingStart"><i class="fas fa-play"></i> Lancer la mesure du temps de tonte</a>
         <a class="btn btn-default btn-sm" id="bt_timingCancel" style="display:none;"><i class="fas fa-ban"></i> Annuler la mesure</a>
         <span id="timing_status" style="margin-left:10px;"></span>
@@ -133,7 +133,7 @@ if (!isConnect()) {
                     <span>min (30 à 360, soit 6h max)</span>
                 </div>
                 <div class="col-sm-6 col-sm-offset-3" style="clear:both;">
-                    <span class="help-block">🌧️ Sert à détecter une vraie pluie pendant une tonte en cours (la tonte du jour est alors annulée, et le robot attend le délai réglé ci-dessous en section Pluie avant de repartir) tout en ignorant les fausses alertes qui arriveraient bien plus tard le même jour, une fois la tonte déjà terminée depuis longtemps. Distincte de la marge ci-dessus. Par défaut : 120 min.</span>
+                    <span class="help-block">🏁 La fin de tonte (notification et mesure du temps) est maintenant détectée automatiquement d'après la tâche du robot ; cette durée ne sert plus de repli que si le robot ne la fournit pas.<br>🌧️ Sert à détecter une vraie pluie pendant une tonte en cours (la tonte du jour est alors annulée, et le robot attend le délai réglé ci-dessous en section Pluie avant de repartir) tout en ignorant les fausses alertes qui arriveraient bien plus tard le même jour, une fois la tonte déjà terminée depuis longtemps. Distincte de la marge ci-dessus. Par défaut : 120 min.</span>
                 </div>
             </div>
         </fieldset>
@@ -350,7 +350,7 @@ if (!isConnect()) {
             <ul style="margin:0 0 10px 15px; padding:0; font-size:0.9em; color:#666;">
                 <li><b>Reçoit "pas de tonte"</b> : envoyée en fin de journée si la tonte n'a pas pu avoir lieu.</li>
                 <li><b>Reçoit "erreur robot"</b> : envoyée si le robot signale une erreur.</li>
-                <li><b>Reçoit "fin de tonte"</b> (carte envoyée au format PNG) : envoyée à la fin de la période de tonte paramétrée, les jours de tonte seulement.</li>
+                <li><b>Reçoit "fin de tonte"</b> (carte envoyée au format PNG) : envoyée dès que le robot a terminé sa tonte (tâche refermée, robot posé), les jours de tonte seulement. Les recharges en cours de tonte ne déclenchent rien. Si le robot ne donne pas cette information, elle part à la fin de la durée de tonte estimée (+ 30 min).</li>
             </ul>
             <table class="table table-condensed" id="table_notifications">
                 <thead>
