@@ -57,6 +57,14 @@ try {
             }
         }
 
+        // Alternance des formes : liste normalisée (5 au plus, lignes valides) ; l'option ne s'active
+        // que si au moins une forme valide est enregistrée (jamais confiance uniquement au JS).
+        $rotation_errors = LandroidRTKScheduler::rotationErrors($config);
+        $config['pattern_rotation'] = LandroidRTKScheduler::rotationEntries($config);
+        if (!empty($rotation_errors)) {
+            $config['pattern_rotation_enabled'] = '0';
+        }
+
         LandroidRTKScheduler::saveConfig($eqLogic, $config);
         LandroidRTKScheduler::syncWidgetCommands($eqLogic);
 
@@ -64,6 +72,7 @@ try {
             'saved' => true,
             'enabled' => (!empty($config['enabled']) && $config['enabled'] == '1'),
             'errors' => $errors,
+            'rotation_errors' => $rotation_errors,
         ));
     }
 
@@ -147,13 +156,16 @@ try {
         ajax::success(true);
     }
 
-    if (init('action') == 'startTiming' || init('action') == 'cancelTiming' || init('action') == 'timingInfo') {
+    if (init('action') == 'startTiming' || init('action') == 'cancelTiming' || init('action') == 'timingInfo' || init('action') == 'deleteTiming') {
         $eqLogic = eqLogic::byId(init('id'));
         if (!is_object($eqLogic)) {
             throw new Exception('Équipement introuvable');
         }
         if (init('action') == 'startTiming') {
             ajax::success(LandroidRTKScheduler::startTiming($eqLogic));
+        }
+        if (init('action') == 'deleteTiming') {
+            LandroidRTKScheduler::deleteTimingEntry($eqLogic, init('start'));
         }
         if (init('action') == 'cancelTiming') {
             LandroidRTKScheduler::cancelTiming($eqLogic);
@@ -170,7 +182,21 @@ try {
         if (!is_array($config)) {
             throw new Exception('Configuration invalide (JSON illisible)');
         }
-        ajax::success(LandroidRTKScheduler::estimateNextMow($eqLogic, $config));
+        $result = LandroidRTKScheduler::estimateNextMow($eqLogic, $config);
+        $result['pattern'] = LandroidRTKScheduler::patternInfo($eqLogic, $config);
+        ajax::success($result);
+    }
+
+    if (init('action') == 'patternInfo') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic)) {
+            throw new Exception('Équipement introuvable');
+        }
+        $config = json_decode(init('config'), true);
+        if (!is_array($config)) {
+            throw new Exception('Configuration invalide (JSON illisible)');
+        }
+        ajax::success(LandroidRTKScheduler::patternInfo($eqLogic, $config));
     }
 
     if (init('action') == 'latestStartPreview') {

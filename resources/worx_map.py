@@ -24,6 +24,9 @@ except Exception:  # pragma: no cover - dépend de la version installée
     HEADERS = None
 
 
+MAP_API_VERSION_HEADER = {"X-Api-Version": "2026-06-09"}
+
+
 def _finite(value):
     if isinstance(value, bool):
         return None
@@ -99,15 +102,31 @@ async def fetch_rtk_map_status(cloud, map_id):
             return None, "adresse du service Worx introuvable (cloud.ENDPOINT)"
         url = f"https://{endpoint}/api/v2/maps/{map_id}"
         session = await api._ensure_session()
-        if AGET is not None and HEADERS is not None:
-            data = await AGET(url, HEADERS(api.access_token), session=session)
-        else:
-            headers = {"Accept": "application/json",
-                       "Authorization": f"Bearer {api.access_token}"}
-            async with session.get(url, headers=headers) as resp:
-                if resp.status >= 400:
-                    return None, f"le service Worx a répondu HTTP {resp.status}"
-                data = await resp.json()
+        data = None
+        # Avec l'en-tête de version, Worx ajoute les zones sans visibilité (zones bleu-vert de
+        # l'application). Si cette requête échoue, on retombe sur la requête sans en-tête.
+        for extra in (MAP_API_VERSION_HEADER, {}):
+            try:
+                if AGET is not None and HEADERS is not None:
+                    headers = dict(HEADERS(api.access_token))
+                    headers.update(extra)
+                    data = await AGET(url, headers, session=session)
+                else:
+                    headers = {"Accept": "application/json",
+                               "Authorization": f"Bearer {api.access_token}"}
+                    headers.update(extra)
+                    async with session.get(url, headers=headers) as resp:
+                        if resp.status >= 400:
+                            if not extra:
+                                return None, f"le service Worx a répondu HTTP {resp.status}"
+                            continue
+                        data = await resp.json()
+            except Exception as exc:
+                if not extra:
+                    return None, f"requête refusée ou échouée ({type(exc).__name__})"
+                continue
+            if isinstance(data, dict) and data:
+                break
     except Exception as exc:
         return None, f"requête refusée ou échouée ({type(exc).__name__})"
     if not isinstance(data, dict):
@@ -121,6 +140,176 @@ async def fetch_rtk_map(cloud, map_id):
     """Comme fetch_rtk_map_status, sans la raison. Retourne un dict ou None."""
     data, _reason = await fetch_rtk_map_status(cloud, map_id)
     return data
+
+
+def coverage_from(now=None):
+    """Début de la journée locale, en UTC, au format attendu par l'API
+    (« AAAA-MM-JJ HH:MM:SS ») : l'API renvoie les heures en UTC."""
+    from datetime import datetime, timezone
+    now = now or datetime.now().astimezone()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return midnight.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+async def fetch_coverage_status(cloud, map_id, from_str):
+    """Surface déjà tondue depuis `from_str` (polygones calculés par Worx, comme
+    la zone vert foncé de l'application). Retourne (donnees, raison) ; ne lève
+    jamais d'exception. `donnees` = {"coverage": [polygones], "from", "to"}."""
+    if not map_id:
+        return None, "identifiant de carte absent"
+    try:
+        api = getattr(cloud, "_api", None)
+        if api is None:
+            return None, "interface interne de pyworxcloud introuvable (cloud._api)"
+        await api.check_token()
+        endpoint = getattr(getattr(api, "cloud", None), "ENDPOINT", None)
+        if not endpoint:
+            return None, "adresse du service Worx introuvable (cloud.ENDPOINT)"
+        from urllib.parse import quote
+        url = f"https://{endpoint}/api/v2/maps/{map_id}/coverage?from={quote(from_str)}"
+        session = await api._ensure_session()
+        if AGET is not None and HEADERS is not None:
+            data = await AGET(url, HEADERS(api.access_token), session=session)
+        else:
+            headers = {"Accept": "application/json",
+                       "Authorization": f"Bearer {api.access_token}"}
+            async with session.get(url, headers=headers) as resp:
+                if resp.status >= 400:
+                    return None, f"le service Worx a répondu HTTP {resp.status}"
+                data = await resp.json()
+    except Exception as exc:
+        return None, f"requête refusée ou échouée ({type(exc).__name__})"
+    if not isinstance(data, dict) or not isinstance(data.get("coverage"), list):
+        return None, "réponse inattendue du service Worx (coverage absent)"
+    return data, None
+
+
+# Formes de coupe de la zone de tonte (champ « cut_type » de la carte), relevées sur un Landroid Vision 4WD :
+# 0 Naturel (sans angle), 1 Parallèle, 4 Diamant, 5 Damier.
+CUT_TYPES = (0, 1, 4, 5)
+
+
+def build_cut_metadata(meta, cut_type, angle):
+    """Réglages de zone avec la forme et l'angle voulus (seuls ces champs changent).
+
+    Même règle que l'application : Naturel n'a ni angle ni largeur de motif ; la largeur de
+    motif (pattern_width) existe pour Parallèle et Damier, pas pour Diamant.
+    Retourne (nouveaux réglages, raison d'erreur ou None).
+    """
+    if cut_type not in CUT_TYPES:
+        return None, f"forme inconnue ({cut_type})"
+    new = dict(meta or {})
+    new["cut_type"] = cut_type
+    if cut_type == 0:
+        new.pop("cut_direction", None)
+        new.pop("pattern_width", None)
+        return new, None
+    if angle is None:
+        return None, "angle manquant pour cette forme"
+    try:
+        angle = int(angle)
+    except (TypeError, ValueError):
+        return None, "angle illisible"
+    if not 0 <= angle <= 359:
+        return None, "angle hors limites (0 à 359)"
+    new["cut_direction"] = angle
+    if cut_type in (1, 5):
+        new.setdefault("pattern_width", 0)
+    else:
+        new.pop("pattern_width", None)
+    return new, None
+
+
+def mowing_zone(map_data):
+    """Zone de tonte (type 2) de la carte, ou None."""
+    layers = (map_data or {}).get("layers") or {}
+    for b in layers.get("boundaries") or []:
+        for z in (b or {}).get("zones") or []:
+            if ((z or {}).get("summary") or {}).get("type") == 2:
+                return z
+    return None
+
+
+async def set_cut_settings(cloud, map_id, cut_type, angle, wait_s=24):
+    """Change la forme et l'angle de coupe de la zone de tonte (lecture, modification d'un seul champ
+    à la fois dans les réglages, renvoi, puis relecture pour vérifier).
+
+    Les contours ne sont JAMAIS renvoyés : seule la couche « zone » avec ses réglages. La version de la
+    carte ne change pas (constaté), donc la surface tondue du jour est conservée.
+    Retourne un dict {"ok": bool, "reason": str|None, "cut_type": int|None, "cut_angle": int|None,
+    "changed": bool}. Ne lève jamais d'exception ; aucune coordonnée dans la réponse.
+    """
+    import asyncio
+
+    out = {"ok": False, "reason": None, "cut_type": None, "cut_angle": None, "changed": False}
+    if not map_id:
+        out["reason"] = "identifiant de carte absent"
+        return out
+    try:
+        api = getattr(cloud, "_api", None)
+        endpoint = getattr(getattr(api, "cloud", None), "ENDPOINT", None)
+        if api is None or not endpoint:
+            out["reason"] = "interface interne de pyworxcloud introuvable"
+            return out
+        session = await api._ensure_session()
+        url = f"https://{endpoint}/api/v2/maps/{map_id}"
+
+        async def call(method, body=None):
+            await api.check_token()
+            headers = {"Accept": "application/json", "Authorization": f"Bearer {api.access_token}"}
+            headers.update(MAP_API_VERSION_HEADER)
+            kw = {"json": body} if body is not None else {}
+            target = url + ("/layers" if method == "PUT" else "")
+            async with session.request(method, target, headers=headers, **kw) as resp:
+                text = await resp.text()
+                return resp.status, text
+
+        status, text = await call("GET")
+        if status != 200:
+            out["reason"] = f"lecture de la carte refusée (HTTP {status})"
+            return out
+        zone = mowing_zone(json.loads(text))
+        if zone is None:
+            out["reason"] = "zone de tonte introuvable dans la carte"
+            return out
+        meta = dict(zone.get("metadata") or {})
+        new, err = build_cut_metadata(meta, cut_type, angle)
+        if err:
+            out["reason"] = err
+            return out
+        out["cut_type"] = new.get("cut_type")
+        out["cut_angle"] = new.get("cut_direction")
+        if new == meta:
+            out["ok"] = True
+            return out  # déjà réglé : rien à envoyer
+        summary = zone.get("summary") or {}
+        payload = {"layers": [{"layer": {"type": "zone", "id": summary.get("id"), "zone_type": summary.get("type")},
+                               "name": zone.get("name"), "metadata": new}]}
+        status, _text = await call("PUT", payload)
+        if status >= 300:
+            out["reason"] = f"modification refusée par Worx (HTTP {status})"
+            return out
+        out["changed"] = True
+        # Vérification : relecture jusqu'à ce que la zone porte bien les nouveaux réglages.
+        waited = 0
+        while True:
+            await asyncio.sleep(3)
+            waited += 3
+            status, text = await call("GET")
+            if status == 200:
+                z2 = mowing_zone(json.loads(text))
+                m2 = dict((z2 or {}).get("metadata") or {})
+                if m2.get("cut_type") == new.get("cut_type") and m2.get("cut_direction") == new.get("cut_direction"):
+                    out["ok"] = True
+                    out["cut_type"] = m2.get("cut_type")
+                    out["cut_angle"] = m2.get("cut_direction")
+                    return out
+            if waited >= wait_s:
+                out["reason"] = "réglage envoyé mais non confirmé à la relecture"
+                return out
+    except Exception as exc:
+        out["reason"] = f"échec ({type(exc).__name__})"
+    return out
 
 
 def cfg_debug_keys(device):

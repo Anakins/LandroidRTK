@@ -195,11 +195,13 @@ def translate_error_label(raw_description, error_id=None):
         return ERROR_LABELS_FR[key]
     return str(raw_description).strip().capitalize()
 
+# Codes confirmés sur un Landroid Vision 4WD (réglage changé dans l'application puis relu) :
+# 0 Naturel (sans angle), 1 Parallèle, 4 Diamant, 5 Damier.
 CUT_PATTERN_LABELS = {
-    0: "Naturel (non confirmé)",
+    0: "Naturel",
     1: "Parallèle",
-    2: "Damier (non confirmé)",
-    3: "Diamant (non confirmé)",
+    4: "Diamant",
+    5: "Damier",
 }
 
 
@@ -250,6 +252,41 @@ def extract_cut_config(device):
     if not zones:
         return {}
     return ((zones[0].get("cfg") or {}).get("cut")) or {}
+
+
+def mow_task_info(raw_dat):
+    """
+    Progression de la tâche de tonte en cours, telle que l'application Worx
+    l'affiche (« Restant ») : `p` = pourcentage déjà tondu, `rtn` = temps de
+    tonte restant en secondes (la recharge n'est pas comptée). Retourne None
+    si les données de tâche sont absentes, sinon un dict :
+    {"active": bool, "p": int|None, "rtn": int|None, "zones": [id, ...]}
+    """
+    cut = (raw_dat or {}).get("cut")
+    if not isinstance(cut, dict) or "tsk" not in cut:
+        return None
+    tasks = cut.get("tsk")
+    if not isinstance(tasks, list):
+        return None
+    for task in tasks:
+        if not isinstance(task, dict) or task.get("te") is not None:
+            continue
+        zones = [z for z in (task.get("z") or []) if isinstance(z, dict)]
+        percents = [z.get("p") for z in zones if isinstance(z.get("p"), (int, float))]
+        times = [z.get("rtn") for z in zones if isinstance(z.get("rtn"), (int, float))]
+        if not percents:
+            continue
+        # Plusieurs zones : progression moyenne, temps cumulé.
+        p = int(round(sum(percents) / len(percents)))
+        if p >= 100:
+            continue
+        return {
+            "active": True,
+            "p": p,
+            "rtn": int(sum(times)) if times else None,
+            "zones": [z.get("id") for z in zones if z.get("id") is not None],
+        }
+    return {"active": False, "p": None, "rtn": None, "zones": []}
 
 
 def device_status(device):
@@ -330,6 +367,7 @@ def device_status(device):
         "rtk_pos": worx_map.rtk_position(device),
         "rtk_heading": worx_map.rtk_heading(device),
         "rtk_map_id": worx_map.rtk_map_id(device),
+        "mow_task": mow_task_info(raw_dat),
     }
 
 
@@ -518,6 +556,25 @@ async def run():
         if mode == "status":
             await cloud.update(serial)
             print(json.dumps(device_status(devices[target_key]), ensure_ascii=False, default=str))
+            return
+
+        if mode == "set_cut":
+            # set_cut <serial> <forme> <angle|->
+            if len(sys.argv) < 5:
+                print(json.dumps({"error": "usage: worx_helper.py set_cut <serial> <forme> <angle|->"}))
+                sys.exit(2)
+            try:
+                wanted_type = int(sys.argv[3])
+            except ValueError:
+                print(json.dumps({"error": "forme de coupe illisible"}))
+                sys.exit(2)
+            wanted_angle = None if sys.argv[4] in ("-", "") else sys.argv[4]
+            await cloud.update(serial)
+            res = await worx_map.set_cut_settings(cloud, worx_map.rtk_map_id(devices[target_key]), wanted_type, wanted_angle)
+            if not res.get("ok"):
+                print(json.dumps({"error": "Forme de coupe non appliquée : " + str(res.get("reason"))}, ensure_ascii=False))
+                sys.exit(1)
+            print(json.dumps(res, ensure_ascii=False))
             return
 
         if mode == "action":

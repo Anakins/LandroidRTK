@@ -12,6 +12,9 @@
 var LandroidRTKMap = (function () {
     var BASE_W = 900, BASE_H = 620, BASE_PAD = 48;
     var COMPACT_SIDE = 520, COMPACT_PAD = 22;
+    var COVER_COLOR = '#00602a';   // surface tondue selon Worx
+    var NOVIS_FILL = '#166a62';    // zones sans visibilité (bleu-vert de l'application)
+    var NOVIS_STROKE = '#4fc3b4';
     var TRAIL_MAX_GAP_S = 300;          // coupure de la trace après 5 min sans point
     var TRAIL_MAX_SEGMENT_M = 35;       // ... ou saut de position de plus de 35 m
     var TRAIL_MIN_STEP_M = 0.25;
@@ -49,7 +52,8 @@ var LandroidRTKMap = (function () {
             var zs = (b[i] && Array.isArray(b[i].zones)) ? b[i].zones : [];
             for (var j = 0; j < zs.length; j++) {
                 var cs = (zs[j] && Array.isArray(zs[j].contours)) ? zs[j].contours : [];
-                for (var k = 0; k < cs.length; k++) { addShape(out, 'zone', cs[k]); }
+                var kind = (zs[j] && zs[j].summary && parseInt(zs[j].summary.type, 10) === 3) ? 'novis' : 'zone';
+                for (var k = 0; k < cs.length; k++) { addShape(out, kind, cs[k]); }
             }
         }
         var ex = layer(map, 'exclusions');
@@ -164,12 +168,17 @@ var LandroidRTKMap = (function () {
         return segs;
     }
 
-    function robotSvg(x, y, heading) {
+    function robotSvg(x, y, heading, fourWheels) {
         var rot = (heading === null || heading === undefined || !isFinite(heading)) ? '' : ' rotate(' + f(heading) + ')';
         var body = '<ellipse cx="2" cy="4" rx="17" ry="20" fill="#000" opacity=".35"/>' +
             '<rect x="-13" y="-17" width="26" height="34" rx="9" fill="#f47b20" stroke="#fff7ed" stroke-width="2"/>' +
-            '<rect x="-17" y="-12" width="5" height="24" rx="2" fill="#161b1f"/>' +
-            '<rect x="12" y="-12" width="5" height="24" rx="2" fill="#161b1f"/>' +
+            (fourWheels
+                ? '<rect x="-17" y="-14" width="5" height="11" rx="2" fill="#161b1f"/>' +
+                  '<rect x="-17" y="3" width="5" height="11" rx="2" fill="#161b1f"/>' +
+                  '<rect x="12" y="-14" width="5" height="11" rx="2" fill="#161b1f"/>' +
+                  '<rect x="12" y="3" width="5" height="11" rx="2" fill="#161b1f"/>'
+                : '<rect x="-17" y="-12" width="5" height="24" rx="2" fill="#161b1f"/>' +
+                  '<rect x="12" y="-12" width="5" height="24" rx="2" fill="#161b1f"/>') +
             '<circle cx="0" cy="6" r="4.5" fill="#f8fafc"/>';
         var nose = (rot !== '') ? '<path d="M -7 -19 L 0 -31 L 7 -19 Z" fill="#fff7ed" stroke="#f47b20" stroke-width="1.5" stroke-linejoin="round"/>' : '';
         return '<g class="robot" transform="translate(' + f(x) + ' ' + f(y) + ')' + rot + '">' + body + nose + '</g>';
@@ -188,6 +197,66 @@ var LandroidRTKMap = (function () {
             String(message).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text></svg>';
     }
 
+    /* Polygones de la surface tondue (réponse « coverage » de Worx) ; les
+     * contours dégénérés (moins de 3 points) sont ignorés. */
+    function coverageShapes(cov) {
+        var out = [];
+        (Array.isArray(cov) ? cov : []).forEach(function (c) {
+            var outer = contourPoints(c);
+            if (outer.length < 3) { return; }
+            var holes = [];
+            ((c && Array.isArray(c.children)) ? c.children : []).forEach(function (h) {
+                var hp = contourPoints(h);
+                if (hp.length >= 3) { holes.push(hp); }
+            });
+            out.push({outer: outer, holes: holes});
+        });
+        return out;
+    }
+
+    function numFr(n) { return (Math.round(parseFloat(n) * 10) / 10).toFixed(1).replace('.', ','); }
+
+    function fmtRemaining(seconds) {
+        var m = Math.max(0, Math.round(parseFloat(seconds) / 60));
+        var h = Math.floor(m / 60);
+        m = m % 60;
+        return h > 0 ? (h + ' h ' + (m < 10 ? '0' : '') + m + ' min') : (m + ' min');
+    }
+
+    /* Mêmes lignes que LandroidRTKMapSvg::progressLines (PHP) : surface
+     * restante / totale, temps restant, ou « Tonte terminée ». */
+    function progressLines(pr) {
+        if (!pr || !pr.state) { return {lines: [], done: false}; }
+        if (pr.state === 'done') { return {lines: ['Tonte terminée'], done: true}; }
+        if (pr.state !== 'active') { return {lines: [], done: false}; }
+        var lines = [], second = [];
+        if (pr.area_left !== null && pr.area_left !== undefined && pr.area_total !== null && pr.area_total !== undefined) {
+            lines.push('Reste ' + numFr(pr.area_left) + ' / ' + numFr(pr.area_total) + ' m²');
+        } else if (pr.pct_left !== undefined) {
+            lines.push('Reste ' + parseInt(pr.pct_left, 10) + ' %');
+        }
+        if (pr.rtn !== null && pr.rtn !== undefined) { second.push(fmtRemaining(pr.rtn)); }
+        if (pr.pct_left !== undefined && lines.length && lines[0].indexOf('%') < 0) { second.push(parseInt(pr.pct_left, 10) + ' %'); }
+        if (second.length) { lines.push(second.join(' · ')); }
+        return {lines: lines, done: false};
+    }
+
+    function progressBox(pr, W) {
+        var pl = progressLines(pr);
+        if (!pl.lines.length) { return ''; }
+        var k = Math.max(1, W / 520);
+        var fs = 14 * k, lh = 20 * k, maxc = 0;
+        pl.lines.forEach(function (l) { maxc = Math.max(maxc, l.length); });
+        var o = '<g><rect x="' + f(10 * k) + '" y="' + f(10 * k) + '" width="' + f(maxc * 8.6 * k + 20 * k) + '" height="' + f(pl.lines.length * lh + 12 * k) +
+            '" rx="' + f(8 * k) + '" fill="#101412" fill-opacity=".82" stroke="#3a4640"/>';
+        pl.lines.forEach(function (l, i) {
+            o += '<text x="' + f(20 * k) + '" y="' + f(10 * k + lh + i * lh - 3 * k) + '" fill="' + (pl.done ? '#7ddc9a' : '#f1f5f2') +
+                '" font-family="Arial,Helvetica,sans-serif" font-size="' + f(fs) + '" font-weight="600">' +
+                l.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text>';
+        });
+        return o + '</g>';
+    }
+
     /* data = réponse de l'action ajax getMapData. Retourne {svg, info}.
      * opts.compact : vignette recadrée sur le jardin (zones + station) avec
      * une petite marge, au lieu de la grande carte de l'onglet. */
@@ -203,7 +272,7 @@ var LandroidRTKMap = (function () {
         var sh = shapes(map);
         var st = stations(map);
         info.hasMap = true;
-        for (var i = 0; i < sh.length; i++) { if (sh[i].kind === 'zone') { info.zones++; } else { info.exclusions++; } }
+        for (var i = 0; i < sh.length; i++) { if (sh[i].kind === 'zone') { info.zones++; } else if (sh[i].kind === 'exclusion') { info.exclusions++; } }
 
         var geo = [];
         sh.forEach(function (s) { geo = geo.concat(s.outer); });
@@ -251,13 +320,30 @@ var LandroidRTKMap = (function () {
             clip += '<path d="' + d + '" fill-rule="evenodd" clip-rule="evenodd"/>';
             out.push('<path d="' + d + '" fill="#008b3a" fill-rule="evenodd" stroke="#ff6045" stroke-width="5" stroke-linejoin="round"/>');
         });
+        // Surface tondue selon Worx (comme l'application) : remplissage vert foncé, limité à la pelouse.
+        var cov = coverageShapes(data.coverage);
+        if (cov.length) {
+            out.push('<defs><clipPath id="lrtk-clip" clipPathUnits="userSpaceOnUse">' + clip + '</clipPath></defs>');
+            out.push('<g clip-path="url(#lrtk-clip)" fill="' + COVER_COLOR + '" fill-rule="evenodd" class="coverage">');
+            cov.forEach(function (c) {
+                var d = path(c.outer, proj, true);
+                c.holes.forEach(function (h) { d += path(h, proj, true); });
+                out.push('<path d="' + d + '"/>');
+            });
+            out.push('</g>');
+        }
+
         sh.forEach(function (s) {
-            if (s.kind === 'zone') { return; }
+            if (s.kind !== 'novis') { return; }
+            out.push('<path d="' + path(s.outer, proj, true) + '" fill="' + NOVIS_FILL + '" stroke="' + NOVIS_STROKE + '" stroke-width="2" stroke-dasharray="6 4" class="novis"/>');
+        });
+        sh.forEach(function (s) {
+            if (s.kind !== 'exclusion') { return; }
             out.push('<path d="' + path(s.outer, proj, true) + '" fill="#b66b36" stroke="#b66b36" stroke-width="3" opacity=".95"/>');
         });
 
-        // Trace du jour (bandes tondues), estompée avec l'ancienneté.
-        if (segs.length) {
+        // Trace du jour (bandes tondues), estompée avec l'ancienneté. Remplacée par la surface de Worx quand elle est connue.
+        if (segs.length && !cov.length) {
             var now = parseFloat(data.now) || (Date.now() / 1000);
             var buckets = {};
             segs.forEach(function (sg) {
@@ -279,12 +365,13 @@ var LandroidRTKMap = (function () {
         }
 
         st.forEach(function (p) { var xy = proj.xy(p); out.push(stationSvg(xy[0], xy[1])); });
-        if (pos) { var rxy = proj.xy(pos); out.push(robotSvg(rxy[0], rxy[1], (data.pos && data.pos.docked) ? null : heading)); }
+        if (pos) { var rxy = proj.xy(pos); out.push(robotSvg(rxy[0], rxy[1], (data.pos && data.pos.docked) ? null : heading, data.model_type === 'vision_4wd')); }
+        out.push(progressBox(data.progress, W));
         out.push('</svg>');
         return {svg: out.join(''), info: info};
     }
 
-    return {build: build, trailSegments: trailSegments, distanceM: distanceM, shapes: shapes, stations: stations};
+    return {build: build, progressLines: progressLines, trailSegments: trailSegments, distanceM: distanceM, shapes: shapes, stations: stations};
 }());
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -413,6 +500,12 @@ if (typeof $ !== 'undefined' && typeof document !== 'undefined' && $('#maptab').
             if ($('#maptab').is(':visible')) { start(); }
         });
 
+        $('#bt_lrtkMapPoints').off('click').on('click', function (e) {
+            var id = eqId();
+            if (!id) { e.preventDefault(); return; }
+            $(this).attr('href', AJAX + '?action=downloadMapPoints&id=' + encodeURIComponent(id));
+        });
+
         $('#bt_lrtkMapPng').off('click').on('click', function () {
             var id = eqId();
             if (!id) { return; }
@@ -432,7 +525,7 @@ if (typeof $ !== 'undefined' && typeof document !== 'undefined' && $('#maptab').
                     var link = AJAX + '?action=downloadMapPng&id=' + encodeURIComponent(id);
                     $box.removeClass('alert-danger').addClass('alert-success').empty()
                         .append($('<div>').text('{{Image créée}} : ' + res.result.file))
-                        .append($('<a class="btn btn-sm btn-default" style="margin-top:6px;">').attr('href', link).html('<i class="fas fa-download"></i> {{Télécharger}}'))
+                        .append($('<a class="btn btn-sm btn-default noOnePageLoad" style="margin-top:6px;" target="_blank" rel="noopener">').attr('href', link).html('<i class="fas fa-download"></i> {{Télécharger}}'))
                         .show();
                 }
             });
@@ -465,7 +558,7 @@ if (typeof $ !== 'undefined' && typeof document !== 'undefined' && $('#maptab').
                     $box.removeClass('alert-danger').addClass('alert-success').empty()
                         .append($('<div>').text('{{Export créé}} : ' + r.file))
                         .append($('<div>').text(r.fallback ? '{{Le dossier data/ du plugin n\'était pas inscriptible : le fichier est dans le dossier temporaire de Jeedom.}}' : ''))
-                        .append($('<a class="btn btn-sm btn-default" style="margin-top:6px;">').attr('href', link).html('<i class="fas fa-download"></i> {{Télécharger}}'))
+                        .append($('<a class="btn btn-sm btn-default noOnePageLoad" style="margin-top:6px;" target="_blank" rel="noopener">').attr('href', link).html('<i class="fas fa-download"></i> {{Télécharger}}'))
                         .show();
                 }
             });

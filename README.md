@@ -28,6 +28,8 @@ Pilotage des tondeuses robot **Worx Landroid Vision Cloud** (2WD/4WD, avec RTK/G
 - Commandes manuelles : Démarrer, Stop, Retour à la base, Tonte des bordures, Mode festif (activer/désactiver, avec état affiché), et lecture de l'état de la coupe intelligente des bordures
 - Statuts et erreurs traduits en français (tous les codes d'erreur connus, y compris ceux propres aux modèles Vision/RTK)
 - **Carte dans le widget** : vignette du jardin recadrée, avec la position du robot et la trace du jour, rafraîchie toutes les 30 s
+- **Surface tondue** : celle calculée par Worx (zone vert foncé de l'application), dans le widget, l'onglet Carte et l'image PNG
+- **Tonte restante** : progression, temps et surface restants comme dans l'application Worx (3 commandes, un coin de la carte « Reste 206 / 317 m² », et dans l'image PNG de fin de tonte un en-tête avec la date, l'heure puis « Tonte terminée » ou le restant)
 - **Onglet Carte** : plan du jardin (zones, exclusions, station), position du robot et passages du jour, dessinés sans service externe
 - Alerte automatique en cas de perte de connexion prolongée (via le heartbeat natif Jeedom)
 - **Programmation automatique de tonte** basée sur météo/humidité/pluie — voir [section dédiée](#6-programmation-automatique-de-tonte)

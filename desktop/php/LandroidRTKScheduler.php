@@ -47,8 +47,8 @@ if (!isConnect()) {
 
     <div class="alert alert-default" style="margin:10px; border:1px solid #ddd;" id="timing_box">
         <strong><i class="fas fa-stopwatch"></i> Mesure du temps de tonte</strong>
-        <div class="alert alert-danger" style="margin:8px 0;">
-            <i class="fas fa-exclamation-triangle"></i>
+        <div style="margin:8px 0; padding:10px 15px; background:#fff3e0; border:1px solid #ff9800; border-left:5px solid #ff9800; border-radius:4px; color:#7a4100;">
+            <i class="fas fa-exclamation-triangle" style="color:#ef6c00;"></i>
             <strong>Le bouton ci-dessous LANCE IMMÉDIATEMENT le robot</strong>, avec les notifications de départ habituelles (qui précisent qu'il s'agit d'une mesure : météo, humidité et horaires ne sont pas vérifiés). <strong>Ne le relancez pas ensuite à la main</strong> : la mesure part du clic. Elle se termine quand le robot est revenu à la station, chargé à 100 %, et n'en est pas reparti pendant l'attente réglée ci-dessous (il peut revenir se charger une ou deux fois avant de finir). Le robot doit être à la station.
         </div>
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
@@ -63,11 +63,11 @@ if (!isConnect()) {
         <span id="timing_status" style="margin-left:10px;"></span>
         <table class="table table-condensed" style="margin-top:10px; margin-bottom:0;" id="table_timing">
             <thead>
-                <tr><th>Date</th><th>Angle</th><th>Tonte (hors station)</th><th>Durée totale</th><th>Recharges en cours de tonte</th></tr>
+                <tr><th>Date</th><th>Forme</th><th>Angle</th><th>Tonte (hors station)</th><th>Durée totale</th><th>Recharges en cours de tonte</th><th style="width:40px;"></th></tr>
             </thead>
             <tbody></tbody>
         </table>
-        <span class="help-block" style="margin-bottom:0;">Les 10 dernières mesures sont conservées, avec l'angle de coupe réglé au moment du lancement : changez l'angle dans la tondeuse entre deux mesures pour les comparer.</span>
+        <span class="help-block" style="margin-bottom:0;">Les 10 dernières mesures sont conservées (🗑️ en bout de ligne pour en supprimer une qui ne vous intéresse pas), avec la forme de tonte et l'angle réglés au moment du lancement : changez-les dans la tondeuse entre deux mesures pour les comparer.</span>
     </div>
 
     <div id="schedule_errors" class="alert alert-danger" style="display:none; margin:10px;"></div>
@@ -275,6 +275,33 @@ if (!isConnect()) {
                 <div class="col-sm-6" style="display:flex; align-items:center; gap:8px;">
                     <input type="number" id="sched_battery_min_percent" class="form-control" min="20" max="100" style="width:80px;">
                     <span>% (20 à 100)</span>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend><i class="fas fa-th"></i> Alternance des formes de coupe</legend>
+            <div class="help-block" style="margin:0 15px 10px;">
+                Change la forme de coupe (Parallèle, Diamant, Damier ou Naturel) et son angle <b>avant chaque tonte lancée par la programmation</b>,
+                dans l'ordre de la liste (5 formes au maximum), puis recommence. Pas de changement pour une reprise après la pluie, ni si le robot n'est pas à la station.
+                La forme et l'angle réglés sur le robot sont rappelés dans les notifications de début et de fin de tonte. Naturel n'a pas d'angle.
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">Alterner à chaque tonte</label>
+                <div class="col-sm-6" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <label class="checkbox-inline" style="margin:0;"><input type="checkbox" id="sched_rotation_enabled" disabled> Activer</label>
+                    <span id="sched_rotation_hint" class="text-muted"></span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">Formes</label>
+                <div class="col-sm-8">
+                    <table class="table table-condensed" id="table_rotation" style="width:auto; margin-bottom:6px;">
+                        <thead><tr><th style="width:40px;">#</th><th style="width:180px;">Forme</th><th style="width:130px;">Angle (0 à 359°)</th><th></th><th></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    <a class="btn btn-sm btn-default" id="bt_addRotation"><i class="fas fa-plus"></i> Ajouter une forme</a>
+                    <div id="sched_rotation_next" class="text-muted" style="margin-top:8px;"></div>
                 </div>
             </div>
         </fieldset>

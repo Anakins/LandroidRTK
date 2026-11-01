@@ -41,6 +41,8 @@ RECONNECT_DELAY = 30
 POLL_INTERVAL = 10  # secondes entre deux vérifications de l'état en mémoire
 MAP_REFRESH_INTERVAL = 1800  # la carte RTK change très rarement : 30 min suffisent
 MAP_RETRY_INTERVAL = 300  # après un échec de récupération, on réessaie dans 5 min
+COVERAGE_INTERVAL = 120  # surface tondue : toutes les 2 min pendant la tonte
+DOCKED_LABELS = ("Dans la station", "En charge")
 
 
 def push_to_jeedom(serial, data, error_message=None):
@@ -101,6 +103,47 @@ def push_map_to_jeedom(serial, map_id, map_data):
         return False, f"envoi à Jeedom impossible ({type(exc).__name__})"
 
 
+def push_coverage_to_jeedom(serial, map_id, day, coverage_data):
+    """Envoie à Jeedom la surface tondue du jour (action ajax daemonCoverage).
+    Retourne (ok, raison). Aucune coordonnée dans les journaux."""
+    ajax_url = os.environ.get("LANDROIDRTK_AJAX_URL")
+    secret = os.environ.get("LANDROIDRTK_DAEMON_SECRET")
+    if not ajax_url or not secret:
+        return False, "variables LANDROIDRTK_AJAX_URL / LANDROIDRTK_DAEMON_SECRET absentes"
+    body = urllib.parse.urlencode({
+        "action": "daemonCoverage",
+        "secret": secret,
+        "serial": serial,
+        "map_id": map_id,
+        "day": day,
+        "data": json.dumps(coverage_data, default=str),
+    }).encode("utf-8")
+    try:
+        req = urllib.request.Request(ajax_url, data=body, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+        return True, None
+    except urllib.error.HTTPError as exc:
+        logger.error(f"Échec push de la surface tondue vers Jeedom pour {serial}: HTTP {exc.code}")
+        return False, f"HTTP {exc.code}"
+    except Exception as exc:
+        logger.error(f"Échec push de la surface tondue vers Jeedom pour {serial}: {exc}")
+        return False, type(exc).__name__
+
+
+def coverage_due(state, day, docked, now):
+    """Faut-il redemander la surface tondue ? Au premier passage et à chaque
+    nouveau jour ; toutes les 2 min tant que le robot n'est pas à la station ;
+    une dernière fois dès qu'il y arrive (surface finale)."""
+    if state is None or state["day"] != day:
+        return True
+    if now < state["next_try"]:
+        return False
+    if not docked:
+        return True
+    return not state["docked"]
+
+
 def push_log_to_jeedom(message):
     """
     Fait remonter un message dans les logs Jeedom (LandroidRTK, niveaux
@@ -135,6 +178,7 @@ async def main():
     map_state = {}  # serial -> {"map_id", "next_try"}
     map_status = {}  # serial -> texte de diagnostic affiché dans l'onglet Carte
     map_status_logged = {}  # serial -> dernier échec déjà écrit dans le log Jeedom
+    cov_state = {}  # serial -> {"day", "next_try", "docked"} : surface tondue du jour
     was_disconnected = False
     last_disconnect_log_time = 0
     disconnect_since = None
@@ -202,6 +246,26 @@ async def main():
                                         status = "échec : " + str(reason)
                                         map_state[serial] = {"map_id": map_id, "next_try": time.time() + MAP_RETRY_INTERVAL}
                             map_status[serial] = status
+                            # Surface déjà tondue aujourd'hui (comme l'application Worx).
+                            try:
+                                if map_id and map_status.get(serial, "").startswith("carte téléchargée"):
+                                    now_ts = time.time()
+                                    day = time.strftime("%Y%m%d", time.localtime(now_ts))
+                                    docked = bool(data.get("charging")) or data.get("status_label") in DOCKED_LABELS
+                                    if coverage_due(cov_state.get(serial), day, docked, now_ts):
+                                        cov, creason = await worx_map.fetch_coverage_status(cloud, map_id, worx_map.coverage_from())
+                                        pushed = False
+                                        if cov is not None:
+                                            pushed, creason = push_coverage_to_jeedom(serial, map_id, day, {"coverage": cov["coverage"]})
+                                        if pushed:
+                                            cov_state[serial] = {"day": day, "next_try": now_ts + COVERAGE_INTERVAL, "docked": docked}
+                                        else:
+                                            prev = cov_state.get(serial)
+                                            cov_state[serial] = {"day": day, "next_try": now_ts + COVERAGE_INTERVAL,
+                                                                 "docked": prev["docked"] if prev and prev["day"] == day else False}
+                                            logger.info(f"Surface tondue ({serial}) non mise à jour : {creason}")
+                            except Exception as exc:
+                                logger.error(f"Surface tondue ({serial}) : {type(exc).__name__}")
                             if status.startswith(("échec", "identifiant")) and map_status_logged.get(serial) != status:
                                 map_status_logged[serial] = status
                                 push_log_to_jeedom("Carte RTK : " + status)

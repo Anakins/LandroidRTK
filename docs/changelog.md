@@ -1,7 +1,63 @@
 # Changelog
 
+## 1.13.0 (2026-11-01)
+- **Alternance des formes de coupe** (onglet Programmation, section « Alternance des formes de coupe »). Une liste de 5 formes au maximum (Parallèle, Diamant, Damier ou Naturel, avec un angle de 0 à 359° sauf pour Naturel) ; avant chaque tonte lancée par la programmation, le plugin règle la forme suivante de la liste sur le robot, puis recommence au début. L'option ne peut être activée (et sauvegardée) que si la liste contient au moins une forme valide ; une ligne incomplète bloque la sauvegarde.
+  - Le changement n'a lieu que si le robot est à la station, jamais pour une reprise après la pluie (même tonte). Si Worx ne confirme pas, la tonte part avec la forme actuelle (avertissement dans la notification) et la liste n'avance pas.
+  - Le réglage passe par l'API de Worx (modification des seuls réglages de la zone de tonte, contours jamais renvoyés) : la carte et la surface tondue du jour sont conservées.
+- **Forme et angle dans les notifications** de début et de fin de tonte : « 🧩 Forme de tonte : Diamant, angle 30°. » (Naturel : sans angle). Ce sont les valeurs réellement réglées sur le robot à cet instant, même si elles ont été forcées dans l'application.
+- **Prochaine tonte** (onglet Programmation) : affiche aussi la forme prévue (alternance active) ou la forme actuelle du robot.
+- Chaque ligne de la liste affiche, comme les autres champs, un ✔ vert ou un ✖ rouge à droite avec la raison (angle entier de 0 à 359°).
+- **Tableau du temps de tonte : 🗑️ en bout de ligne** pour supprimer une mesure qui ne vous intéresse pas (confirmation demandée).
+- **Annulation de la mesure du temps de tonte renforcée** : une mesure annulée est marquée comme telle ; si un processus (démon, cron) qui avait chargé l'équipement avant le clic réécrivait l'ancien état « en cours », la mesure est supprimée au passage suivant et n'ajoute jamais de ligne à l'historique.
+- Redémarrage du démon nécessaire (nouveaux fichiers Python). À installer de préférence robot à la station.
+
+## 1.12.3 (2026-11-01)
+- **Noms des formes de tonte corrigés** d'après les réglages relevés sur un Landroid Vision 4WD (changés dans l'application puis relus) : code 0 = Naturel, 1 = Parallèle, 4 = Diamant, 5 = Damier (les anciens codes supposés 2 et 3 sont retirés). Remplace la 1.12.2, qui avait inversé Diamant et Damier.
+- **Naturel n'a pas d'angle** : quand la forme est Naturel, l'angle affiché est effacé au lieu de garder l'ancien (la mesure du temps de tonte n'enregistre plus un angle périmé ; le tableau affiche « — »).
+- Redémarrage du démon nécessaire.
+
+## 1.12.1 (2026-11-01)
+- **Export des points de la carte : écarts entre contours.** Le fichier indique l'écart minimal en cm entre deux contours proches (zone sans visibilité / zone interdite / bordure du Jardin), ou « se chevauchent ». Un trait jaune relie les deux points les plus proches sur la carte, avec la distance. Pratique pour vérifier un écart voulu entre une zone bleue et une zone interdite.
+- **Moins de fausses alertes** : un segment n'est plus signalé comme « saut » qu'à partir de 3 m (et 20 fois le segment médian) : les côtés droits d'un contour ont peu de points et font couramment 1 à 2 m. Un écart de surface n'est signalé que s'il dépasse 5 % et 0,5 m².
+
+## 1.12.0 (2026-10-31)
+- **Export de contrôle des points de la carte** : nouveau bouton « Points de la carte » dans l'onglet Carte. Il télécharge un SVG (zoomable) qui dessine TOUS les points enregistrés par Worx pour chaque bordure, reliés dans l'ordre, avec le point de départ (cercle blanc), le sens de parcours, une numérotation régulière et un résumé (nombre de points, périmètre, surface calculée comparée à celle annoncée par Worx). Les anomalies sont repérées en rouge : pic très aigu, points superposés, segment anormalement long, contour qui se croise, surface qui ne correspond pas. Lecture seule : sert à vérifier comment Worx a enregistré les bordures. Un pic ou un doublon isolé est souvent un simple bruit du GPS.
+
+## 1.11.0 (2026-10-31)
+- **Zones sans visibilité (bleu-vert de l'application)** : le démon demande maintenant la carte à Worx avec l'en-tête de version `X-Api-Version: 2026-06-09`, qui ajoute ces zones (type 3). Elles sont dessinées en bleu-vert à pointillés dans le widget, l'onglet Carte et l'image PNG, comme dans l'application. Elles ne sont pas comptées dans la surface à tondre. Si Worx refuse l'en-tête, le plugin retombe sur la carte sans ces zones, comme avant.
+- Nécessite de redémarrer le démon (la carte est redemandée au redémarrage).
+
+## 1.10.3 (2026-10-31)
+- **Mesure du temps de tonte : plus de faux « retour à la station »**. Les statuts « Hors ligne » et « Inconnu » (qui apparaissent quand le démon redémarre ou que la connexion est perdue un instant) sont ignorés par la mesure ; auparavant, un redémarrage du démon pendant que le robot était en charge pouvait ajouter une recharge de trop.
+
+## 1.10.2 (2026-10-31)
+- **Mesure du temps de tonte : la forme de tonte** (Parallèle…) est enregistrée avec l'angle, affichée dans une colonne « Forme » du tableau de l'onglet Planification et reprise dans les notifications de début et de fin. Les mesures déjà enregistrées ou en cours au moment de la mise à jour restent valides (forme « ? » pour les anciennes ; pour une mesure en cours, la forme réglée sur le robot à la fin est utilisée).
+
+## 1.10.1 (2026-10-31)
+- **Forme du robot sur la carte selon le modèle** (widget, onglet Carte, image PNG) : 4 roues noires (deux de chaque côté) pour le Landroid Vision 4WD, deux grandes roues latérales pour le 2WD et les modèles non reconnus. Le modèle est celui détecté par le plugin (champ « model_type » de l'équipement).
+
+## 1.10.0 (2026-10-31)
+- **Surface tondue identique à l'application Worx** : le démon demande à Worx la surface déjà tondue aujourd'hui (la zone vert foncé de l'application) toutes les 2 minutes pendant la tonte, et une dernière fois quand le robot rentre. Elle est dessinée en vert foncé, d'un seul tenant, dans le widget, l'onglet Carte et l'image PNG de fin de tonte, à la place de la trace reconstituée à partir des positions (qui restait en bandes séparées, avec des trous, et se perdait quand le démon était arrêté). Si Worx ne la fournit pas, l'ancienne trace est utilisée comme avant.
+- La surface tondue est celle du jour (elle repart de zéro à minuit) ; les zones interdites restent dessinées par-dessus.
+- Nécessite de redémarrer le démon.
+
+## 1.9.1 (2026-10-31)
+- **Image PNG de fin de tonte** : un en-tête est ajouté **au-dessus** de la carte (l'image est agrandie en hauteur), de même fond qu'elle, avec la date et l'heure puis « Tonte terminée » (vert) ou, si le robot n'a pas fini, la surface et le temps restants (ambre). Plus rien ne masque la trace de tonte.
+- **Garde-fou de conservation** : les exports de diagnostic, les images PNG et les restes de génération interrompue sont effacés au bout de 30 jours (contrôle au plus une fois par heure ; la carte et la configuration ne sont jamais touchées).
+
+## 1.9.0 (2026-10-31)
+- **Tonte restante, comme dans l'application Worx** (« Restant ») : trois nouvelles commandes, *Tonte restante* (%), *Temps de tonte restant* (min) et *Surface restante* (m²), calculées à partir de la progression et du temps restant que le robot envoie, et de la surface de la zone de la carte. Le temps restant ne compte que la tonte, pas les recharges.
+- **Coin de la carte** (widget, onglet Carte et image PNG de fin de tonte) : « Reste 206,2 / 317,2 m² » et « 1 h 41 min · 65 % » pendant la tonte ; « Tonte terminée » une fois finie (jusqu'à minuit). Une notification de fin de tonte reçue avec le robot encore en cours se reconnaît donc à l'image.
+- Image PNG : police TrueType du système si elle existe, sinon police intégrée de GD.
+- Nécessite de redémarrer le démon (le démon envoie la progression).
+
+## 1.8.2 (2026-10-31)
+- **Bug corrigé (téléchargements)** : les boutons « Télécharger » (export de diagnostic et image PNG) restaient bloqués sur le logo Jeedom qui tourne, car Jeedom traitait le lien comme un changement de page. Ils s'ouvrent maintenant dans un nouvel onglet, hors du chargement de page de Jeedom.
+
 ## 1.8.1 (2026-10-31)
+- **Bug corrigé (notification de fin de tonte périmée)** : une notification en attente depuis plus de 12 h après l'heure prévue (par exemple après une mise à jour du plugin) est abandonnée au lieu d'être envoyée en retard avec une carte qui ne correspond plus.
 - **Mesure du temps de tonte** : l'attente à la station, chargé à 100 %, avant de conclure est réglable de 0 à 60 min (30 par défaut), avec contrôle ✓ à côté du champ.
+- Mesure du temps de tonte : l'encadré d'avertissement est orange (et non plus rouge).
 - Outil interne `worx_helper.py raw <serial>` : relevé de toutes les données du robot (configuration, données temps réel, attributs, statut), anonymisé par défaut, pour comparer avec l'application.
 
 ## 1.8.0 (2026-10-31)

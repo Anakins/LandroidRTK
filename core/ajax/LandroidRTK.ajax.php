@@ -52,6 +52,23 @@ try {
         ajax::success(array('success' => $ok));
     }
 
+    if (init('action') == 'daemonCoverage') {
+        $secret = init('secret');
+        $expected = LandroidRTK::getApiKey();
+        if ($secret == '' || $secret != $expected) {
+            log::add('LandroidRTK', 'error', 'daemonCoverage: secret invalide reçu du démon.');
+            throw new Exception('403 - Secret invalide');
+        }
+        $cov = json_decode(init('data', 'null'), true);
+        if (!is_array($cov) || !isset($cov['coverage']) || !is_array($cov['coverage'])) {
+            // Volontairement SANS le contenu : il contient des coordonnées.
+            log::add('LandroidRTK', 'error', 'daemonCoverage: surface tondue invalide reçue du démon.');
+            throw new Exception('Surface tondue invalide');
+        }
+        $ok = LandroidRTK::storeCoverage(init('serial'), init('day'), $cov['coverage']);
+        ajax::success(array('success' => $ok));
+    }
+
     if (init('action') == 'daemonLog') {
         $secret = init('secret');
         $expected = LandroidRTK::getApiKey();
@@ -131,6 +148,22 @@ try {
         header('Content-Disposition: attachment; filename="carte.png"');
         header('Content-Length: ' . filesize($path));
         readfile($path);
+        exit;
+    }
+
+    if (init('action') == 'downloadMapPoints') {
+        $eqLogic = eqLogic::byId(init('id'));
+        if (!is_object($eqLogic) || $eqLogic->getEqType_name() != 'LandroidRTK') {
+            throw new Exception(__('Équipement introuvable', __FILE__));
+        }
+        $r = LandroidRTK::mapPointsExport($eqLogic->getId(), $eqLogic->getName());
+        if ($r === null) {
+            throw new Exception(__('Aucune carte téléchargée pour le moment', __FILE__));
+        }
+        header('Content-Type: image/svg+xml; charset=utf-8');
+        header('Content-Disposition: attachment; filename="carte_points_' . date('Ymd_His') . '.svg"');
+        header('Content-Length: ' . strlen($r['svg']));
+        echo $r['svg'];
         exit;
     }
 

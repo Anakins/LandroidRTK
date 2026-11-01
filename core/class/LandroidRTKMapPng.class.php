@@ -93,7 +93,7 @@ class LandroidRTKMapPng {
         self::poly($im, self::flat($bolt), self::rgb($im, '#ffffff'));
     }
 
-    private static function drawRobot($im, $x, $y, $heading, $s) {
+    private static function drawRobot($im, $x, $y, $heading, $s, $fourWheels = false) {
         $deg = $heading === null ? 0 : $heading;
         $f = function ($pts) use ($x, $y, $deg, $s) {
             return self::flat(self::xf($pts, $x, $y, $deg, $s));
@@ -107,8 +107,14 @@ class LandroidRTKMapPng {
         self::poly($im, $f($sh), self::rgb($im, '#000000', 95));
         self::poly($im, $f(self::roundRect(-14, -18, 28, 36, 10, 0)), self::rgb($im, '#fff7ed'));
         self::poly($im, $f(self::roundRect(-13, -17, 26, 34, 9, 0)), self::rgb($im, '#f47b20'));
-        self::poly($im, $f(self::roundRect(-17, -12, 5, 24, 2)), self::rgb($im, '#161b1f'));
-        self::poly($im, $f(self::roundRect(12, -12, 5, 24, 2)), self::rgb($im, '#161b1f'));
+        if ($fourWheels) {
+            foreach (array(array(-17, -14), array(-17, 3), array(12, -14), array(12, 3)) as $w) {
+                self::poly($im, $f(self::roundRect($w[0], $w[1], 5, 11, 2)), self::rgb($im, '#161b1f'));
+            }
+        } else {
+            self::poly($im, $f(self::roundRect(-17, -12, 5, 24, 2)), self::rgb($im, '#161b1f'));
+            self::poly($im, $f(self::roundRect(12, -12, 5, 24, 2)), self::rgb($im, '#161b1f'));
+        }
         $c = array();
         for ($i = 0; $i < 16; $i++) {
             $a = $i * 22.5 * M_PI / 180;
@@ -125,6 +131,90 @@ class LandroidRTKMapPng {
      * Écrit le PNG dans $path. Retourne array('ok'=>bool, 'reason'=>string).
      * $data = résultat de LandroidRTK::getMapData().
      */
+    private static function fontFile() {
+        $cands = array(
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf',
+            '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
+            '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+        );
+        foreach ($cands as $f) {
+            if (is_file($f) && is_readable($f)) {
+                return $f;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Texte de l'en-tête ajouté au-dessus de la carte : date et heure, puis
+     * « Tonte terminée » (vert) ou, si le robot n'a pas fini, la surface et
+     * le temps restants (ambre). Chaque ligne : array(texte, couleur).
+     */
+    private static function bannerLines($data) {
+        $now = (isset($data['now']) && is_numeric($data['now']) && $data['now'] > 0) ? intval($data['now']) : time();
+        $lines = array(array(date('d/m/Y à H:i', $now), 'w'));
+        $pl = LandroidRTKMapSvg::progressLines(isset($data['progress']) ? $data['progress'] : null);
+        foreach ($pl['lines'] as $l) {
+            $lines[] = array($l, $pl['done'] ? 'g' : 'a');
+        }
+        return $lines;
+    }
+
+    /** Accents et signes absents de la police GD intégrée (jeu ISO-8859-2). */
+    private static function asciiFold($t) {
+        return strtr($t, array('à' => 'a', 'â' => 'a', 'ä' => 'a', 'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e', 'î' => 'i', 'ï' => 'i',
+            'ô' => 'o', 'ö' => 'o', 'ù' => 'u', 'û' => 'u', 'ü' => 'u', 'ç' => 'c', '²' => '2', '·' => '-', '€' => 'EUR'));
+    }
+
+    /**
+     * Mise en page de l'en-tête : police TrueType si elle existe, sinon police
+     * intégrée de GD agrandie ×2 (toujours lisible, jamais d'échec).
+     */
+    private static function bannerPlan($W, $lines) {
+        $n = count($lines);
+        $font = (function_exists('imagettftext') && function_exists('imagettfbbox')) ? self::fontFile() : null;
+        if ($font !== null) {
+            $size = max(15, min(24, intval(round($W * 0.04))));
+            $lh = intval(round($size * 1.75));
+            $pad = intval(round($size * 0.8));
+            return array('font' => $font, 'size' => $size, 'lh' => $lh, 'pad' => $pad, 'h' => $n * $lh + 2 * $pad);
+        }
+        $fh = imagefontheight(5);
+        $lh = ($fh + 4) * 2;
+        return array('font' => null, 'size' => 0, 'lh' => $lh, 'pad' => 10, 'h' => $n * $lh + 20);
+    }
+
+    private static function drawBanner($out, $W, $lines, $plan) {
+        $cols = array(
+            'w' => array(241, 245, 242),
+            'g' => array(110, 231, 150),
+            'a' => array(255, 200, 87),
+        );
+        if ($plan['font'] !== null) {
+            foreach ($lines as $i => $l) {
+                $c = $cols[$l[1]];
+                $col = imagecolorallocate($out, $c[0], $c[1], $c[2]);
+                imagettftext($out, $plan['size'], 0, intval(round($plan['size'] * 0.9)), $plan['pad'] + $i * $plan['lh'] + intval(round($plan['lh'] * 0.72)), $col, $plan['font'], $l[0]);
+            }
+            return;
+        }
+        $fw = imagefontwidth(5);
+        $fh = imagefontheight(5);
+        $tw = max(1, intval(floor($W / 2)));
+        $th = count($lines) * ($fh + 4) + 10;
+        $t = imagecreatetruecolor($tw, $th);
+        imagefilledrectangle($t, 0, 0, $tw, $th, imagecolorallocate($t, 16, 20, 18));
+        foreach ($lines as $i => $l) {
+            $c = $cols[$l[1]];
+            imagestring($t, 5, 8, 5 + $i * ($fh + 4), self::asciiFold($l[0]), imagecolorallocate($t, $c[0], $c[1], $c[2]));
+        }
+        imagecopyresized($out, $t, 0, 0, 0, 0, $tw * 2, $th * 2, $tw, $th);
+        imagedestroy($t);
+    }
+
     public static function render($data, $path) {
         if (!function_exists('imagecreatetruecolor') || !function_exists('imagepng')) {
             return array('ok' => false, 'reason' => 'extension PHP GD absente');
@@ -214,8 +304,61 @@ class LandroidRTKMapPng {
                 self::outline($im, $projAll($h), 5 * $ss, $red);
             }
         }
+        // Surface tondue selon Worx (comme l'application) : polygones remplis en vert foncé, limités à la pelouse.
+        $cov = LandroidRTKMapSvg::coverageShapes(isset($data['coverage']) ? $data['coverage'] : null);
+        if ($cov) {
+            $cm = imagecreatetruecolor($SW, $SH);
+            $cb = imagecolorallocate($cm, 0, 0, 0);
+            $cw_ = imagecolorallocate($cm, 255, 255, 255);
+            imagefilledrectangle($cm, 0, 0, $SW - 1, $SH - 1, $cb);
+            $minX = $SW;
+            $minY = $SH;
+            $maxX = 0;
+            $maxY = 0;
+            $holesAll = array();
+            foreach ($cov as $c) {
+                $o = $projAll($c['outer']);
+                self::poly($cm, self::flat($o), $cw_);
+                foreach ($o as $pt) {
+                    $minX = min($minX, $pt[0]);
+                    $maxX = max($maxX, $pt[0]);
+                    $minY = min($minY, $pt[1]);
+                    $maxY = max($maxY, $pt[1]);
+                }
+                foreach ($c['holes'] as $h) {
+                    $holesAll[] = $projAll($h);
+                }
+            }
+            foreach ($holesAll as $hp) {
+                self::poly($cm, self::flat($hp), $cb);
+            }
+            $x0 = max(0, intval(floor($minX)) - 1);
+            $x1 = min($SW - 1, intval(ceil($maxX)) + 1);
+            $y0 = max(0, intval(floor($minY)) - 1);
+            $y1 = min($SH - 1, intval(ceil($maxY)) + 1);
+            $dark = self::rgb($im, LandroidRTKMapSvg::COVER_COLOR);
+            for ($y = $y0; $y <= $y1; $y++) {
+                for ($x = $x0; $x <= $x1; $x++) {
+                    if ((imagecolorat($cm, $x, $y) & 0xFF) >= 128 && (imagecolorat($mask, $x, $y) & 0xFF) >= 128) {
+                        imagesetpixel($im, $x, $y, $dark);
+                    }
+                }
+            }
+            imagedestroy($cm);
+        }
+
+        $tealFill = self::rgb($im, LandroidRTKMapSvg::NOVIS_FILL);
+        $tealLine = self::rgb($im, LandroidRTKMapSvg::NOVIS_STROKE);
         foreach ($sh as $s) {
-            if ($s['kind'] === 'zone') {
+            if ($s['kind'] !== 'novis') {
+                continue;
+            }
+            $o = $projAll($s['outer']);
+            self::poly($im, self::flat($o), $tealFill);
+            self::outline($im, $o, 2 * $ss, $tealLine);
+        }
+        foreach ($sh as $s) {
+            if ($s['kind'] !== 'exclusion') {
                 continue;
             }
             $o = $projAll($s['outer']);
@@ -224,7 +367,8 @@ class LandroidRTKMapPng {
         }
 
         // trace : traits opaques en niveaux de gris (1 niveau = 1 opacité) puis mélange
-        $segs = LandroidRTKMapSvg::trailSegments(isset($data['trail']) ? $data['trail'] : array(), $bnd);
+        // (seulement si Worx n'a pas fourni la surface tondue)
+        $segs = $cov ? array() : LandroidRTKMapSvg::trailSegments(isset($data['trail']) ? $data['trail'] : array(), $bnd);
         if ($segs) {
             $now = (isset($data['now']) && is_numeric($data['now']) && $data['now'] > 0) ? floatval($data['now']) : time();
             $cw = (isset($data['cutting_width_m']) && is_numeric($data['cutting_width_m']) && $data['cutting_width_m'] > 0) ? floatval($data['cutting_width_m']) : 0.18;
@@ -289,13 +433,19 @@ class LandroidRTKMapPng {
         }
         if ($pos) {
             $xy = $proj($pos);
-            self::drawRobot($im, $xy[0], $xy[1], $docked ? null : $heading, $es);
+            self::drawRobot($im, $xy[0], $xy[1], $docked ? null : $heading, $es, isset($data['model_type']) && $data['model_type'] === 'vision_4wd');
         }
 
         imageantialias($im, true);
-        $out = imagecreatetruecolor($W, $H);
-        imagecopyresampled($out, $im, 0, 0, 0, 0, $W, $H, $SW, $SH);
+        // En-tête au-dessus de la carte (date, heure, tonte terminée ou restante) :
+        // même fond que la carte, pour ne rien masquer du dessin.
+        $lines = self::bannerLines($data);
+        $plan = self::bannerPlan($W, $lines);
+        $out = imagecreatetruecolor($W, $H + $plan['h']);
+        imagefilledrectangle($out, 0, 0, $W, $H + $plan['h'], imagecolorallocate($out, 16, 20, 18));
+        imagecopyresampled($out, $im, 0, $plan['h'], 0, 0, $W, $H, $SW, $SH);
         imagedestroy($im);
+        self::drawBanner($out, $W, $lines, $plan);
         $dir = dirname($path);
         if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
             imagedestroy($out);

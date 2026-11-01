@@ -144,6 +144,8 @@ function LandroidRTKScheduler_fillForm(_config) {
     $('#sched_condition_id_cmd_id').val(_config.condition_id_cmd_id || '');
     $('#sched_condition_cmd_id').val(_config.condition_cmd_id || '');
 
+    LandroidRTKScheduler_fillRotation(_config);
+
     $('#table_notifications tbody').empty();
     if (_config.notifications && _config.notifications.length) {
         for (var i = 0; i < _config.notifications.length; i++) {
@@ -374,7 +376,8 @@ function LandroidRTKScheduler_refreshNextMow() {
         dataType: 'json',
         success: function (data) {
             if (data.state == 'ok' && data.result && data.result.text) {
-                $('#schedule_next_mow').html('<i class="fas fa-hourglass-half"></i> ' + data.result.text).show();
+                var pat = LandroidRTKScheduler_patternHtml(data.result.pattern);
+                $('#schedule_next_mow').html('<i class="fas fa-hourglass-half"></i> ' + data.result.text + (pat ? '<br><i class="fas fa-th"></i> ' + pat : '')).show();
             } else {
                 $('#schedule_next_mow').hide();
             }
@@ -407,6 +410,133 @@ $(document).on('click', '.bt_openCmdPicker', function (e) {
             LandroidRTKScheduler_refreshPreview($target);
         }
     });
+});
+
+/* ------------------------------------------------------------------ */
+/* Alternance des formes de coupe (5 lignes au plus)                    */
+/* ------------------------------------------------------------------ */
+var LandroidRTKScheduler_ROTATION_MAX = 5;
+var LandroidRTKScheduler_PATTERNS = [[1, 'Parallèle'], [4, 'Diamant'], [5, 'Damier'], [0, 'Naturel (sans angle)']];
+
+function LandroidRTKScheduler_addRotationRow(_row) {
+    _row = _row || {};
+    if ($('#table_rotation tbody tr').length >= LandroidRTKScheduler_ROTATION_MAX) {
+        return;
+    }
+    var $sel = $('<select class="form-control rot_type" style="width:170px;">');
+    for (var i = 0; i < LandroidRTKScheduler_PATTERNS.length; i++) {
+        $sel.append($('<option>').val(LandroidRTKScheduler_PATTERNS[i][0]).text(LandroidRTKScheduler_PATTERNS[i][1]));
+    }
+    $sel.val(_row.type != null ? String(_row.type) : '1');
+    var $angle = $('<input type="number" class="form-control rot_angle" min="0" max="359" step="1" style="width:100px;">');
+    if (_row.angle != null && _row.angle !== '') {
+        $angle.val(_row.angle);
+    }
+    var $tr = $('<tr>')
+        .append($('<td class="rot_num">'))
+        .append($('<td>').append($sel))
+        .append($('<td>').append($angle))
+        .append($('<td class="rot_check" style="white-space:nowrap;">'))
+        .append($('<td>').append($('<a class="btn btn-xs btn-danger bt_removeRotation" title="Supprimer cette ligne"><i class="fas fa-trash"></i></a>')));
+    $('#table_rotation tbody').append($tr);
+    LandroidRTKScheduler_updateRotationUi();
+}
+
+/* Lignes du tableau : {rows: [{type, angle}], valid: nombre de lignes valides, invalid: nombre de lignes incomplètes} */
+function LandroidRTKScheduler_rotationRows() {
+    var rows = [], valid = 0, invalid = 0;
+    $('#table_rotation tbody tr').each(function () {
+        var type = parseInt($(this).find('.rot_type').val(), 10);
+        var raw = $(this).find('.rot_angle').val();
+        var angle = (raw === '' || raw == null) ? null : Number(raw);
+        var ok = (type === 0) || (angle !== null && isFinite(angle) && angle >= 0 && angle <= 359 && Math.floor(angle) === angle);
+        rows.push({type: type, angle: type === 0 ? null : angle});
+        if (ok) { valid++; } else { invalid++; }
+    });
+    return {rows: rows, valid: valid, invalid: invalid};
+}
+
+function LandroidRTKScheduler_updateRotationUi() {
+    var $rows = $('#table_rotation tbody tr');
+    $rows.each(function (i) {
+        var $tr = $(this);
+        $tr.find('.rot_num').text(i + 1);
+        var natural = parseInt($tr.find('.rot_type').val(), 10) === 0;
+        $tr.find('.rot_angle').prop('disabled', natural);
+        if (natural) { $tr.find('.rot_angle').val(''); }
+        var raw = $tr.find('.rot_angle').val();
+        var a = Number(raw);
+        var bad = !natural && (raw === '' || !isFinite(a) || a < 0 || a > 359 || Math.floor(a) !== a);
+        $tr.find('.rot_angle').css('border-color', bad ? '#d9534f' : '');
+        // Même rendu que les autres champs : ✔ vert ou ✖ rouge à droite, avec la raison.
+        $tr.find('.rot_check').html(bad
+            ? '<span style="color:#a94442;"><i class="fas fa-times-circle"></i> {{Angle entier de 0 à 359}}</span>'
+            : '<span style="color:#3c763d;"><i class="fas fa-check-circle"></i> ' + (natural ? '{{Naturel : pas d\'angle}}' : '{{OK}}') + '</span>');
+    });
+    $('#bt_addRotation').toggle($rows.length < LandroidRTKScheduler_ROTATION_MAX);
+    var st = LandroidRTKScheduler_rotationRows();
+    var $cb = $('#sched_rotation_enabled');
+    if (st.valid === 0) {
+        $cb.prop('checked', false).prop('disabled', true);
+        $('#sched_rotation_hint').text('Ajoutez au moins une forme valide pour pouvoir activer l\'alternance.');
+    } else if (st.invalid > 0) {
+        $cb.prop('disabled', false);
+        $('#sched_rotation_hint').text('Complétez l\'angle des lignes en rouge (ou supprimez-les) avant de sauvegarder.');
+    } else {
+        $cb.prop('disabled', false);
+        $('#sched_rotation_hint').text('');
+    }
+}
+
+function LandroidRTKScheduler_fillRotation(_config) {
+    $('#table_rotation tbody').empty();
+    var list = (_config && Array.isArray(_config.pattern_rotation)) ? _config.pattern_rotation : [];
+    for (var i = 0; i < list.length && i < LandroidRTKScheduler_ROTATION_MAX; i++) {
+        LandroidRTKScheduler_addRotationRow(list[i]);
+    }
+    $('#sched_rotation_enabled').prop('checked', _config && _config.pattern_rotation_enabled == '1');
+    LandroidRTKScheduler_updateRotationUi();
+    LandroidRTKScheduler_refreshPatternInfo();
+}
+
+/* Forme prévue pour la prochaine tonte (alternance) ou forme actuelle du robot */
+function LandroidRTKScheduler_patternHtml(_info) {
+    if (!_info || !_info.text) { return ''; }
+    return (_info.mode === 'next' ? 'Forme prévue pour la prochaine tonte' : 'Forme actuelle du robot') + ' : <b>' + $('<div>').text(_info.text).html() + '</b>';
+}
+
+function LandroidRTKScheduler_refreshPatternInfo() {
+    $.ajax({
+        type: 'POST',
+        url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
+        data: {action: 'patternInfo', id: LandroidRTKScheduler_currentEqLogicId, apikey: LandroidRTKApikey,
+               config: JSON.stringify(LandroidRTKScheduler_buildConfig())},
+        dataType: 'json',
+        success: function (data) {
+            if (data.state == 'ok' && data.result && data.result.text) {
+                $('#sched_rotation_next').html('<i class="fas fa-th"></i> ' + LandroidRTKScheduler_patternHtml(data.result));
+            } else {
+                $('#sched_rotation_next').empty();
+            }
+        }
+    });
+}
+
+$(document).on('click', '#bt_addRotation', function (e) {
+    e.preventDefault();
+    LandroidRTKScheduler_addRotationRow({type: 1});
+});
+$(document).on('click', '.bt_removeRotation', function (e) {
+    e.preventDefault();
+    $(this).closest('tr').remove();
+    LandroidRTKScheduler_updateRotationUi();
+    LandroidRTKScheduler_refreshPatternInfo();
+});
+$(document).on('change input', '#table_rotation .rot_type, #table_rotation .rot_angle', function () {
+    LandroidRTKScheduler_updateRotationUi();
+});
+$(document).on('change', '#sched_rotation_enabled, #table_rotation .rot_type, #table_rotation .rot_angle', function () {
+    LandroidRTKScheduler_refreshPatternInfo();
 });
 
 /* ------------------------------------------------------------------ */
@@ -449,6 +579,8 @@ function LandroidRTKScheduler_buildConfig() {
         temperature_max: $('#sched_temperature_max').val(),
         condition_id_cmd_id: $('#sched_condition_id_cmd_id').val(),
         condition_cmd_id: $('#sched_condition_cmd_id').val(),
+        pattern_rotation_enabled: $('#sched_rotation_enabled').is(':checked') ? '1' : '0',
+        pattern_rotation: LandroidRTKScheduler_rotationRows().rows,
         notifications: notifications,
     };
 }
@@ -557,6 +689,17 @@ $(document).on('change', '#sched_enabled', function () {
 /* ------------------------------------------------------------------ */
 $(document).on('click', '#bt_saveSchedule', function (e) {
     e.preventDefault();
+    // Alternance des formes : pas de sauvegarde avec une ligne incomplète, ni activée sans aucune forme valide.
+    var rot = LandroidRTKScheduler_rotationRows();
+    if (rot.invalid > 0) {
+        LandroidRTKScheduler_showResults(['Alternance des formes : complétez l\'angle des lignes en rouge (ou supprimez-les) avant de sauvegarder.'], []);
+        return;
+    }
+    if ($('#sched_rotation_enabled').is(':checked') && rot.valid === 0) {
+        $('#sched_rotation_enabled').prop('checked', false);
+        LandroidRTKScheduler_showResults(['Alternance des formes : ajoutez au moins une forme pour l\'activer.'], []);
+        return;
+    }
     $.ajax({
         type: 'POST',
         url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
@@ -576,14 +719,22 @@ $(document).on('click', '#bt_saveSchedule', function (e) {
                 LandroidRTKScheduler_showResults([data.result || 'Échec de la sauvegarde (erreur serveur, voir logs LandroidRTK).'], []);
                 return;
             }
+            if (data.result.rotation_errors && data.result.rotation_errors.length) {
+                $('#sched_rotation_enabled').prop('checked', false);
+                LandroidRTKScheduler_updateRotationUi();
+            }
             if (data.result.errors && data.result.errors.length) {
                 $('#sched_enabled').prop('checked', false);
-                LandroidRTKScheduler_showResults(data.result.errors, []);
+                LandroidRTKScheduler_showResults(data.result.errors.concat(data.result.rotation_errors || []), []);
                 $.fn.showAlert({message: '{{Programmation sauvegardée, mais pas activée (configuration incomplète)}}', level: 'warning'});
+            } else if (data.result.rotation_errors && data.result.rotation_errors.length) {
+                LandroidRTKScheduler_showResults(data.result.rotation_errors, []);
+                $.fn.showAlert({message: '{{Sauvegardé, mais l\'alternance des formes n\'est pas activée}}', level: 'warning'});
             } else {
                 LandroidRTKScheduler_hideResults();
                 $.fn.showAlert({message: '{{Programmation sauvegardée}}', level: 'success'});
                 LandroidRTKScheduler_refreshNextMow();
+                LandroidRTKScheduler_refreshPatternInfo();
                 if ($('#sched_enabled').is(':checked')) {
                     $('#schedule_conditions_status').show();
                     LandroidRTKScheduler_loadConditionsStatus();
@@ -717,26 +868,28 @@ function LandroidRTKScheduler_renderTiming(r) {
     (r.history || []).forEach(function (h) {
         $b.append($('<tr>')
             .append($('<td>').text(LandroidRTKScheduler_fmtDate(h.start)))
-            .append($('<td>').text(h.angle === null || h.angle === undefined ? '?' : h.angle + '°'))
+            .append($('<td>').text(h.pattern === null || h.pattern === undefined ? '?' : h.pattern))
+            .append($('<td>').text(h.angle === null || h.angle === undefined ? (h.pattern === 'Naturel' ? '—' : '?') : h.angle + '°'))
             .append($('<td>').text(LandroidRTKScheduler_fmtDur(h.out_s)))
             .append($('<td>').text(LandroidRTKScheduler_fmtDur(h.total_s)))
-            .append($('<td>').text(Math.max(0, (h.returns || 1) - 1))));
+            .append($('<td>').text(Math.max(0, (h.returns || 1) - 1)))
+            .append($('<td>').append($('<a class="bt_timingDelete" style="cursor:pointer; text-decoration:none;" title="{{Supprimer cette mesure}}">🗑️</a>').attr('data-start', h.start))));
     });
     if (!(r.history || []).length) {
-        $b.append($('<tr>').append($('<td colspan="5" class="text-muted">').text('{{Aucune mesure pour le moment.}}')));
+        $b.append($('<tr>').append($('<td colspan="7" class="text-muted">').text('{{Aucune mesure pour le moment.}}')));
     }
     $('#bt_timingStart').toggle(!r.running);
     $('#bt_timingCancel').toggle(!!r.running);
     $('#timing_status').text(r.running
-        ? '{{Mesure en cours depuis}} ' + LandroidRTKScheduler_fmtDate(r.started_at) + (r.angle ? ' ({{angle}} ' + r.angle + '°)' : '') + ' — ' + r.returns + ' {{retour(s) à la station}}' + (r.docked ? ', {{actuellement à la station}}' : '')
+        ? '{{Mesure en cours depuis}} ' + LandroidRTKScheduler_fmtDate(r.started_at) + ((r.pattern || r.angle) ? ' (' + (r.pattern ? r.pattern : '') + (r.pattern && r.angle ? ', ' : '') + (r.angle ? '{{angle}} ' + r.angle + '°' : '') + ')' : '') + ' — ' + r.returns + ' {{retour(s) à la station}}' + (r.docked ? ', {{actuellement à la station}}' : '')
         : '');
 }
-function LandroidRTKScheduler_timingCall(action, done) {
+function LandroidRTKScheduler_timingCall(action, done, extra) {
     if (!LandroidRTKScheduler_currentEqLogicId) { return; }
     $.ajax({
         type: 'POST',
         url: 'plugins/LandroidRTK/core/ajax/LandroidRTKScheduler.ajax.php',
-        data: {action: action, id: LandroidRTKScheduler_currentEqLogicId, apikey: LandroidRTKApikey},
+        data: $.extend({action: action, id: LandroidRTKScheduler_currentEqLogicId, apikey: LandroidRTKApikey}, extra || {}),
         dataType: 'json',
         error: function (request, status, error) { handleAjaxError(request, status, error); },
         success: function (data) {
@@ -760,6 +913,12 @@ $(document).on('click', '#bt_timingStart', function (e) {
     LandroidRTKScheduler_timingCall('startTiming', function () {
         $.fn.showAlert({message: '{{Robot lancé : mesure en cours.}}', level: 'warning'});
     });
+});
+$(document).on('click', '.bt_timingDelete', function (e) {
+    e.preventDefault();
+    var $tr = $(this).closest('tr');
+    if (!confirm('{{Supprimer cette mesure de l\'historique ?}}\n' + $tr.children().slice(0, 4).map(function () { return $(this).text(); }).get().join(' · '))) { return; }
+    LandroidRTKScheduler_timingCall('deleteTiming', null, {start: $(this).attr('data-start')});
 });
 $(document).on('click', '#bt_timingCancel', function (e) {
     e.preventDefault();

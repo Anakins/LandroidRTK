@@ -4,6 +4,7 @@ require_once dirname(__FILE__) . '/LandroidRTKCmd.class.php';
 require_once dirname(__FILE__) . '/LandroidRTKScheduler.class.php';
 require_once dirname(__FILE__) . '/LandroidRTKMapSvg.class.php';
 require_once dirname(__FILE__) . '/LandroidRTKMapPng.class.php';
+require_once dirname(__FILE__) . '/LandroidRTKMapPoints.class.php';
 
 class LandroidRTK extends eqLogic {
 
@@ -68,6 +69,17 @@ class LandroidRTK extends eqLogic {
         array('logicalId' => 'rain_delay',    'name' => 'Délai pluie',      'type' => 'numeric', 'unite' => 'h', 'order' => 12),
         array('logicalId' => 'rain_detected', 'name' => 'Pluie détectée',   'type' => 'string',  'unite' => '',  'order' => 13),
         array('logicalId' => 'party_mode',    'name' => 'Mode festif',      'type' => 'string',  'unite' => '',  'order' => 18),
+    );
+
+    /*
+     * Commandes d'information sur la tonte en cours (comme « Restant » dans
+     * l'application Worx). Créées à part des commandes ci-dessus : elles ne
+     * font pas partie du bloc d'informations que le widget réorganise.
+     */
+    const PROGRESS_COMMANDS = array(
+        array('logicalId' => 'mow_left_pct',  'name' => 'Tonte restante',        'type' => 'numeric', 'unite' => '%',   'order' => 20),
+        array('logicalId' => 'mow_left_min',  'name' => 'Temps de tonte restant', 'type' => 'numeric', 'unite' => 'min', 'order' => 21),
+        array('logicalId' => 'mow_left_area', 'name' => 'Surface restante',      'type' => 'numeric', 'unite' => 'm²',  'order' => 22),
     );
 
     /*
@@ -291,7 +303,30 @@ class LandroidRTK extends eqLogic {
      * Crée les commandes manquantes sur un eqLogic (jamais de doublon,
      * jamais de modification d'une commande déjà existante).
      */
+    public static function ensureProgressCommands($eqLogic) {
+        foreach (self::PROGRESS_COMMANDS as $def) {
+            if (is_object($eqLogic->getCmd(null, $def['logicalId']))) {
+                continue;
+            }
+            $cmd = new LandroidRTKCmd();
+            $cmd->setLogicalId($def['logicalId']);
+            $cmd->setName($def['name']);
+            $cmd->setType('info');
+            $cmd->setSubType($def['type']);
+            $cmd->setUnite($def['unite']);
+            $cmd->setIsHistorized(0);
+            $cmd->setGeneric_type('');
+            $cmd->setEqLogic_id($eqLogic->getId());
+            $cmd->setOrder($def['order']);
+            $cmd->setDisplay('forceReturnLineAfter', '1');
+            $cmd->setTemplate('dashboard', 'core::default');
+            $cmd->setTemplate('mobile', 'core::default');
+            $cmd->save();
+        }
+    }
+
     public static function ensureCommands($eqLogic) {
+        self::ensureProgressCommands($eqLogic);
         foreach (self::INFO_COMMANDS as $def) {
             $cmd = $eqLogic->getCmd(null, $def['logicalId']);
             if (is_object($cmd)) {
@@ -406,6 +441,9 @@ class LandroidRTK extends eqLogic {
         }
         if (isset($data['cut_angle'])) {
             $this->checkAndUpdateCmd('angle', $data['cut_angle']);
+        } elseif (isset($data['cut_pattern_label'])) {
+            // forme connue mais sans angle (« Naturel ») : on efface l'ancien angle au lieu de le garder
+            $this->checkAndUpdateCmd('angle', '');
         }
         if (isset($data['rain_delay'])) {
             $this->checkAndUpdateCmd('rain_delay', $data['rain_delay']);
@@ -419,6 +457,7 @@ class LandroidRTK extends eqLogic {
         }
         self::logDockTransition($this, $data);
         self::rememberRtkPosition($this, $data);
+        self::rememberProgress($this, $data);
 
         if (!empty($data['error_active'])) {
             log::add('LandroidRTK', 'error', $this->getHumanName() . ' signale une erreur : ' . $data['error_label']);
@@ -431,6 +470,32 @@ class LandroidRTK extends eqLogic {
     /**
      * Exécute une action (start/pause/home/edge) sur cette tondeuse.
      */
+    // Formes de coupe relevées sur un Landroid Vision 4WD : code => libellé (Naturel n'a pas d'angle).
+    const CUT_PATTERNS = array(0 => 'Naturel', 1 => 'Parallèle', 4 => 'Diamant', 5 => 'Damier');
+
+    /**
+     * Change la forme et l'angle de coupe de la zone de tonte (une seule requête à Worx, sans toucher aux
+     * contours ni à la version de la carte), puis vérifie que Worx l'a bien pris en compte.
+     * $angle : entier 0 à 359, ignoré pour Naturel (code 0). Retourne array('pattern' => libellé,
+     * 'angle' => int|null, 'changed' => bool) ou null en cas d'échec (le détail est dans les logs).
+     */
+    public function setCutPattern($type, $angle) {
+        $type = intval($type);
+        if (!isset(self::CUT_PATTERNS[$type])) {
+            return null;
+        }
+        $res = self::callHelper(array('set_cut', $this->getLogicalId(), (string) $type, ($type === 0 || $angle === null || $angle === '') ? '-' : (string) intval($angle)));
+        if ($res === null || empty($res['ok'])) {
+            return null;
+        }
+        $label = self::CUT_PATTERNS[$type];
+        $ang = ($type === 0 || !isset($res['cut_angle'])) ? null : intval($res['cut_angle']);
+        // Valeurs confirmées par Worx : on met tout de suite les commandes à jour (le robot, lui, suit en quelques secondes).
+        $this->checkAndUpdateCmd('pattern', $label);
+        $this->checkAndUpdateCmd('angle', $ang === null ? '' : $ang);
+        return array('pattern' => $label, 'angle' => $ang, 'changed' => !empty($res['changed']));
+    }
+
     public function doAction($action) {
         $result = self::callHelper(array('action', $action, $this->getLogicalId()));
         if ($result === null) {
@@ -717,7 +782,51 @@ class LandroidRTK extends eqLogic {
         return array_keys($all);
     }
 
+    /**
+     * Garde-fou : aucun fichier temporaire du plugin (exports de diagnostic,
+     * images PNG, restes de génération interrompue) n'est gardé plus de
+     * 30 jours. Passe au plus une fois par heure, sauf $force.
+     * Retourne le nombre de fichiers effacés.
+     */
+    public static function purgeOldFiles($force = false) {
+        $key = 'LandroidRTK::purgets';
+        if (!$force && time() - intval(cache::byKey($key)->getValue(0)) < 3600) {
+            return 0;
+        }
+        cache::set($key, time());
+        $limit = time() - self::MAP_PNG_KEEP_DAYS * 86400;
+        $files = array();
+        foreach (self::diagnosticDirs() as $dir) {
+            if ($dir) {
+                $files = array_merge($files, glob($dir . '/landroidrtk_diagnostic_*.zip') ?: array(), glob($dir . '/landroidrtk_diagnostic_*.tmp') ?: array());
+            }
+        }
+        foreach (self::mapDirs() as $dir) {
+            if ($dir) {
+                $files = array_merge($files, glob($dir . '/lastmow_*.png') ?: array(), glob($dir . '/lastmow_*.png.tmp') ?: array(), glob($dir . '/coverage_*.json*') ?: array());
+            }
+        }
+        $n = 0;
+        foreach (array_unique($files) as $f) {
+            $t = @filemtime($f);
+            if ($t !== false && $t < $limit && @unlink($f)) {
+                $n++;
+            }
+        }
+        if ($n > 0) {
+            log::add('LandroidRTK', 'info', 'Nettoyage : ' . $n . ' fichier(s) temporaire(s) de plus de ' . self::MAP_PNG_KEEP_DAYS . ' jours effacé(s).');
+        }
+        return $n;
+    }
+
     /** Image PNG la plus récente (envoyée avec la notification de fin de tonte). */
+    /** SVG de contrôle des points de la carte enregistrée (null si aucune carte). */
+    public static function mapPointsExport($eqLogic_id, $title = '') {
+        $loaded = self::loadStoredMap(intval($eqLogic_id));
+        $map = (is_array($loaded['data']) && isset($loaded['data']['map'])) ? $loaded['data']['map'] : null;
+        return is_array($map) ? LandroidRTKMapPoints::render($map, $title) : null;
+    }
+
     public static function lastMowPng($eqLogic_id) {
         $f = self::pngFiles($eqLogic_id);
         return $f ? $f[0] : null;
@@ -748,6 +857,7 @@ class LandroidRTK extends eqLogic {
             $r = LandroidRTKMapPng::render($data, $path);
             if ($r['ok']) {
                 self::purgeOldPng(intval($this->getId()));
+                self::purgeOldFiles();
                 return array('ok' => true, 'path' => $path, 'reason' => '');
             }
             $reason = $r['reason'];
@@ -891,6 +1001,81 @@ class LandroidRTK extends eqLogic {
         return $dir . '/map_' . intval($eqLogic_id) . '.json';
     }
 
+    /* ---------------------------------------------------------------- */
+    /* Surface tondue du jour (polygones calculés par Worx)             */
+    /* ---------------------------------------------------------------- */
+
+    public static function coverageFile($dir, $eqLogic_id) {
+        return $dir . '/coverage_' . intval($eqLogic_id) . '.json';
+    }
+
+    /**
+     * Mémorise la surface déjà tondue aujourd'hui, telle que Worx la calcule
+     * (c'est la zone vert foncé de l'application). $day = AAAAMMJJ local.
+     */
+    public static function storeCoverage($serial, $day, $polygons) {
+        $eqLogic = self::byLogicalId($serial, 'LandroidRTK');
+        if (!is_object($eqLogic) || !is_array($polygons) || !preg_match('/^\d{8}$/', (string) $day)) {
+            return false;
+        }
+        $id = intval($eqLogic->getId());
+        $json = json_encode(array('day' => (string) $day, 'fetched_at' => time(), 'coverage' => array_values($polygons)));
+        if (!is_string($json) || $json === '') {
+            log::add('LandroidRTK', 'error', 'storeCoverage: surface tondue non encodable en JSON (' . json_last_error_msg() . ').');
+            return false;
+        }
+        foreach (self::mapDirs() as $dir) {
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            if (!is_dir($dir) || !is_writable($dir)) {
+                continue;
+            }
+            $file = self::coverageFile($dir, $id);
+            $tmp = $file . '.tmp';
+            if (@file_put_contents($tmp, $json, LOCK_EX) === strlen($json) && @rename($tmp, $file)) {
+                @chmod($file, 0664);
+                foreach (self::mapDirs() as $other) {
+                    if ($other !== $dir && is_file(self::coverageFile($other, $id))) {
+                        @unlink(self::coverageFile($other, $id));
+                    }
+                }
+                return true;
+            }
+            @unlink($tmp);
+        }
+        cache::set('LandroidRTK::coverage::' . $id, $json);
+        return true;
+    }
+
+    /**
+     * Polygones de la surface tondue AUJOURD'HUI (null s'il n'y en a pas, ou si
+     * ceux qui sont mémorisés sont ceux d'un autre jour : la veille s'efface).
+     */
+    public static function loadCoverage($eqLogic_id) {
+        $data = null;
+        foreach (self::mapDirs() as $dir) {
+            $file = self::coverageFile($dir, $eqLogic_id);
+            if (is_file($file)) {
+                $raw = @file_get_contents($file);
+                $d = is_string($raw) ? json_decode($raw, true) : null;
+                if (is_array($d)) {
+                    $data = $d;
+                    break;
+                }
+            }
+        }
+        if ($data === null) {
+            $raw = (string) cache::byKey('LandroidRTK::coverage::' . intval($eqLogic_id))->getValue('');
+            $d = ($raw !== '') ? json_decode($raw, true) : null;
+            $data = is_array($d) ? $d : null;
+        }
+        if (!is_array($data) || !isset($data['day']) || $data['day'] !== date('Ymd') || !isset($data['coverage']) || !is_array($data['coverage'])) {
+            return null;
+        }
+        return array('polygons' => $data['coverage'], 'fetched_at' => isset($data['fetched_at']) ? intval($data['fetched_at']) : null);
+    }
+
     /** Mémorise le texte de diagnostic de la carte envoyé par le démon (écrit seulement s'il change). */
     public static function rememberMapStatus($eqLogic, $text) {
         if (!is_string($text) || $text === '') {
@@ -968,6 +1153,118 @@ class LandroidRTK extends eqLogic {
         return array('data' => null, 'source' => null, 'bytes' => 0, 'dir' => null);
     }
 
+    /**
+     * Surface (m²) des zones de tonte concernées par la tâche, d'après la
+     * carte : le champ « area » est en millionièmes de m². Retourne null si la
+     * carte n'est pas disponible.
+     */
+    public static function zoneAreaM2($id, $zoneIds) {
+        $loaded = self::loadStoredMap(intval($id));
+        $map = (is_array($loaded['data']) && isset($loaded['data']['map'])) ? $loaded['data']['map'] : null;
+        $layers = (is_array($map) && isset($map['layers']['boundaries']) && is_array($map['layers']['boundaries'])) ? $map['layers']['boundaries'] : array();
+        $all = 0.0;
+        $sel = 0.0;
+        $found = false;
+        foreach ($layers as $b) {
+            $zs = (is_array($b) && isset($b['zones']) && is_array($b['zones'])) ? $b['zones'] : array();
+            foreach ($zs as $z) {
+                if (!is_array($z) || !isset($z['area']) || !is_numeric($z['area'])) {
+                    continue;
+                }
+                if (isset($z['summary']['type']) && intval($z['summary']['type']) === 3) {
+                    continue; // zone sans visibilité : pas une zone de tonte
+                }
+                $a = floatval($z['area']) / 1000000.0;
+                $all += $a;
+                $zid = (isset($z['summary']['id'])) ? $z['summary']['id'] : null;
+                if (is_array($zoneIds) && in_array($zid, $zoneIds)) {
+                    $sel += $a;
+                    $found = true;
+                }
+            }
+        }
+        $total = $found ? $sel : $all;
+        return ($total > 0) ? round($total, 1) : null;
+    }
+
+    /**
+     * Mémorise la progression de la tonte en cours (p = % tondu, rtn = temps
+     * de tonte restant, sans la recharge) et met à jour les commandes.
+     * Quand la tâche disparaît alors qu'elle était en cours, la tonte est
+     * marquée « terminée » pour le jour même.
+     */
+    public static function rememberProgress($eqLogic, $data) {
+        if (!is_array($data) || !isset($data['mow_task']) || !is_array($data['mow_task'])) {
+            return;
+        }
+        $t = $data['mow_task'];
+        $id = intval($eqLogic->getId());
+        if (!is_object($eqLogic->getCmd(null, 'mow_left_pct'))) {
+            self::ensureProgressCommands($eqLogic);   // équipement existant avant la mise à jour du plugin
+        }
+        $key = 'LandroidRTK::prog::' . $id;
+        $prev = json_decode((string) cache::byKey($key)->getValue('null'), true);
+        $now = time();
+        $state = array(
+            'ts' => $now,
+            'active' => false,
+            'p' => null,
+            'rtn' => null,
+            'zones' => array(),
+            'done_day' => (is_array($prev) && isset($prev['done_day'])) ? $prev['done_day'] : null,
+        );
+        if (!empty($t['active']) && isset($t['p']) && is_numeric($t['p'])) {
+            $state['active'] = true;
+            $state['p'] = max(0, min(100, intval($t['p'])));
+            $state['rtn'] = (isset($t['rtn']) && is_numeric($t['rtn'])) ? max(0, intval($t['rtn'])) : null;
+            $state['zones'] = (isset($t['zones']) && is_array($t['zones'])) ? array_values($t['zones']) : array();
+            $state['done_day'] = null;
+        } elseif (is_array($prev) && !empty($prev['active'])) {
+            $state['done_day'] = date('Ymd', $now);
+        }
+        cache::set($key, json_encode($state));
+
+        if ($state['active']) {
+            $area = self::zoneAreaM2($id, $state['zones']);
+            $eqLogic->checkAndUpdateCmd('mow_left_pct', 100 - $state['p']);
+            $eqLogic->checkAndUpdateCmd('mow_left_min', $state['rtn'] === null ? 0 : intval(round($state['rtn'] / 60)));
+            $eqLogic->checkAndUpdateCmd('mow_left_area', $area === null ? 0 : round($area * (100 - $state['p']) / 100, 1));
+        } else {
+            $eqLogic->checkAndUpdateCmd('mow_left_pct', 0);
+            $eqLogic->checkAndUpdateCmd('mow_left_min', 0);
+            $eqLogic->checkAndUpdateCmd('mow_left_area', 0);
+        }
+    }
+
+    /**
+     * Ce que la carte affiche dans son coin : 'active' (surface restante /
+     * totale, temps restant), 'done' (tonte terminée aujourd'hui) ou null.
+     */
+    public static function progressInfo($id) {
+        $s = json_decode((string) cache::byKey('LandroidRTK::prog::' . intval($id))->getValue('null'), true);
+        if (!is_array($s) || !isset($s['ts'])) {
+            return null;
+        }
+        if (!empty($s['active'])) {
+            if (time() - intval($s['ts']) > 43200) {
+                return null;   // plus aucune nouvelle depuis 12 h : on n'affiche rien plutôt que du périmé
+            }
+            $total = self::zoneAreaM2($id, isset($s['zones']) ? $s['zones'] : array());
+            $left = intval(100 - $s['p']);
+            return array(
+                'state' => 'active',
+                'pct_left' => $left,
+                'rtn' => $s['rtn'],
+                'area_total' => $total,
+                'area_left' => ($total === null) ? null : round($total * $left / 100, 1),
+            );
+        }
+        if (isset($s['done_day']) && $s['done_day'] === date('Ymd')) {
+            return array('state' => 'done');
+        }
+        return null;
+    }
+
     /** Données pour l'onglet Carte (réservé aux utilisateurs connectés). */
     public function getMapData() {
         $id = intval($this->getId());
@@ -1024,6 +1321,12 @@ class LandroidRTK extends eqLogic {
             'pos' => is_array($pos) ? $pos : null,
             'trail' => $trail,
             'cutting_width_m' => $this->getCuttingWidthM(),
+            // Surface tondue aujourd'hui selon Worx (comme l'application) ; null : on dessine la trace relevée par le plugin.
+            'coverage' => (($cv = self::loadCoverage($id)) !== null) ? $cv['polygons'] : null,
+            'coverage_at' => ($cv !== null) ? $cv['fetched_at'] : null,
+            'progress' => self::progressInfo($id),
+            // Forme du robot dessiné sur la carte : 4 roues (vision_4wd) ou 2 roues (autres modèles).
+            'model_type' => (string) $this->getConfiguration('model_type', 'vision_generic'),
             'daemon_ok' => (isset($daemon['state']) && $daemon['state'] == 'ok'),
             'now' => time(),
         );
@@ -1041,6 +1344,7 @@ class LandroidRTK extends eqLogic {
     }
 
     public function dumpDiagnostic() {
+        self::purgeOldFiles();
         $dirs = self::diagnosticDirs();
         $target = null;
         $fallback = false;
@@ -1097,6 +1401,7 @@ class LandroidRTK extends eqLogic {
         // LandroidRTKScheduler.class.php) : doit tourner à chaque passage
         // de ce cron, indépendamment du reste ci-dessous.
         LandroidRTKScheduler::cronScheduler();
+        self::purgeOldFiles();
 
         // Si le démon tourne, il pousse déjà les mises à jour en continu
         // (toutes les ~10s) : inutile de ré-authentifier séparément toutes
@@ -1167,6 +1472,8 @@ class LandroidRTK extends eqLogic {
         }
         if (isset($data['cut_angle'])) {
             $eqLogic->checkAndUpdateCmd('angle', $data['cut_angle']);
+        } elseif (isset($data['cut_pattern_label'])) {
+            $eqLogic->checkAndUpdateCmd('angle', '');
         }
         if (isset($data['rain_delay'])) {
             $eqLogic->checkAndUpdateCmd('rain_delay', $data['rain_delay']);
@@ -1182,6 +1489,7 @@ class LandroidRTK extends eqLogic {
         }
         self::logDockTransition($eqLogic, $data);
         self::rememberRtkPosition($eqLogic, $data);
+        self::rememberProgress($eqLogic, $data);
         self::rememberMapStatus($eqLogic, isset($data['map_status']) ? $data['map_status'] : null);
 
         if (!empty($data['error_message'])) {
