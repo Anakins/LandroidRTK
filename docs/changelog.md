@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.14.3 (2026-11-06)
+- Mise en page : le bloc « Durée selon la forme » (onglet Programmation) a maintenant la même largeur que les autres blocs (colonnes 6/12, texte d'aide aligné à droite comme les autres).
+
 ## 1.14.2 (2026-11-06)
 - L'historique des mesures du temps de tonte garde **15** entrées (5 formes en rotation au maximum × 3 mesures pour la moyenne) au lieu de 30. Les plus anciennes sont retirées à la prochaine mesure.
 - Le tableau de l'historique est **repliable** (bouton au-dessus du tableau) ; il est déplié par défaut et le choix est mémorisé dans le navigateur.

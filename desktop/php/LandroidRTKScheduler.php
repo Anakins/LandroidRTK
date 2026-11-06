@@ -141,13 +141,15 @@ if (!isConnect()) {
             </div>
             <div class="form-group">
                 <label class="col-sm-3 control-label">Durée selon la forme</label>
-                <div class="col-sm-8">
+                <div class="col-sm-6">
                     <div class="checkbox" style="margin-top:0;">
                         <label><input type="checkbox" id="sched_auto_measure"> Mesurer automatiquement la durée de tonte des formes pas encore mesurées</label>
                     </div>
                     <div class="checkbox">
                         <label><input type="checkbox" id="sched_duration_by_pattern"> Régler l'heure de la notification de fin de tonte d'après la forme et l'angle de la tonte</label>
                     </div>
+                </div>
+                <div class="col-sm-6 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">
                         📐 <b>Mesure automatique</b> : quand la programmation lance une tonte avec une forme et un angle qui n'ont encore jamais été mesurés, le plugin mesure cette tonte (départ → dernier retour, recharges comprises) et l'ajoute à l'historique, sans notification supplémentaire. Chaque forme n'est mesurée qu'une fois ; les mesures du bouton comptent aussi.<br>
                         🏁 <b>Fin de tonte selon la forme</b> : la notification est calée sur la durée mesurée pour la forme et l'angle de la tonte (moyenne des 3 dernières mesures) <b>+ 30 min de marge</b>, pour recevoir la carte quand le robot a vraiment fini. Une forme sans mesure utilise la durée estimée ci-dessus. Cocher cette option coche aussi la mesure automatique, pour que les formes manquantes se mesurent toutes seules.<br>
