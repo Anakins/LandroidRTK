@@ -61,13 +61,16 @@ if (!isConnect()) {
         <a class="btn btn-warning btn-sm" id="bt_timingStart"><i class="fas fa-play"></i> Lancer la mesure du temps de tonte</a>
         <a class="btn btn-default btn-sm" id="bt_timingCancel" style="display:none;"><i class="fas fa-ban"></i> Annuler la mesure</a>
         <span id="timing_status" style="margin-left:10px;"></span>
+        <div style="margin-top:10px;"><a class="btn btn-default btn-xs" id="bt_timingToggle" data-open="1"><i class="fas fa-chevron-up"></i> <span>Replier l'historique des mesures</span></a></div>
+        <div id="timing_history_wrap">
         <table class="table table-condensed" style="margin-top:10px; margin-bottom:0;" id="table_timing">
             <thead>
                 <tr><th>Date</th><th>Forme</th><th>Angle</th><th>Tonte (hors station)</th><th>Durée totale</th><th>Recharges en cours de tonte</th><th style="width:40px;"></th></tr>
             </thead>
             <tbody></tbody>
         </table>
-        <span class="help-block" style="margin-bottom:0;">Les 10 dernières mesures sont conservées (🗑️ en bout de ligne pour en supprimer une qui ne vous intéresse pas), avec la forme de tonte et l'angle réglés au moment du lancement : changez-les dans la tondeuse entre deux mesures pour les comparer.</span>
+        <span class="help-block" style="margin-bottom:0;">Les 15 dernières mesures sont conservées (5 formes en rotation × 3 mesures) (🗑️ en bout de ligne pour en supprimer une qui ne vous intéresse pas), avec la forme de tonte et l'angle réglés au moment du lancement : changez-les dans la tondeuse entre deux mesures pour les comparer.</span>
+        </div>
     </div>
 
     <div id="schedule_errors" class="alert alert-danger" style="display:none; margin:10px;"></div>
@@ -134,6 +137,22 @@ if (!isConnect()) {
                 </div>
                 <div class="col-sm-6 col-sm-offset-3" style="clear:both;">
                     <span class="help-block">🏁 La fin de tonte (notification et mesure du temps) est maintenant détectée automatiquement d'après la tâche du robot ; cette durée ne sert plus de repli que si le robot ne la fournit pas.<br>🌧️ Sert à détecter une vraie pluie pendant une tonte en cours (la tonte du jour est alors annulée, et le robot attend le délai réglé ci-dessous en section Pluie avant de repartir) tout en ignorant les fausses alertes qui arriveraient bien plus tard le même jour, une fois la tonte déjà terminée depuis longtemps. Distincte de la marge ci-dessus. Par défaut : 120 min.</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label">Durée selon la forme</label>
+                <div class="col-sm-8">
+                    <div class="checkbox" style="margin-top:0;">
+                        <label><input type="checkbox" id="sched_auto_measure"> Mesurer automatiquement la durée de tonte des formes pas encore mesurées</label>
+                    </div>
+                    <div class="checkbox">
+                        <label><input type="checkbox" id="sched_duration_by_pattern"> Régler l'heure de la notification de fin de tonte d'après la forme et l'angle de la tonte</label>
+                    </div>
+                    <span class="help-block">
+                        📐 <b>Mesure automatique</b> : quand la programmation lance une tonte avec une forme et un angle qui n'ont encore jamais été mesurés, le plugin mesure cette tonte (départ → dernier retour, recharges comprises) et l'ajoute à l'historique, sans notification supplémentaire. Chaque forme n'est mesurée qu'une fois ; les mesures du bouton comptent aussi.<br>
+                        🏁 <b>Fin de tonte selon la forme</b> : la notification est calée sur la durée mesurée pour la forme et l'angle de la tonte (moyenne des 3 dernières mesures) <b>+ 30 min de marge</b>, pour recevoir la carte quand le robot a vraiment fini. Une forme sans mesure utilise la durée estimée ci-dessus. Cocher cette option coche aussi la mesure automatique, pour que les formes manquantes se mesurent toutes seules.<br>
+                        ℹ️ Si le robot fournit sa tâche de tonte, la fin est détectée d'après elle (plus précis) ; ces durées servent quand il ne la fournit pas.
+                    </span>
                 </div>
             </div>
         </fieldset>

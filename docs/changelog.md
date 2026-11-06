@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.14.2 (2026-11-06)
+- L'historique des mesures du temps de tonte garde **15** entrées (5 formes en rotation au maximum × 3 mesures pour la moyenne) au lieu de 30. Les plus anciennes sont retirées à la prochaine mesure.
+- Le tableau de l'historique est **repliable** (bouton au-dessus du tableau) ; il est déplié par défaut et le choix est mémorisé dans le navigateur.
+
+## 1.14.1 (2026-11-06)
+- Correction de texte : l'onglet Programmation et l'aide indiquent maintenant que **30** mesures du temps de tonte sont conservées (le code les gardait déjà : 10 était un texte resté d'une ancienne version). Aucun changement de comportement par rapport à 1.14.0.
+
+## 1.14.0 (2026-11-06)
+- **Durée de tonte selon la forme** (onglet Programmation, sous « Durée de tonte estimée »), deux options à cocher, désactivées par défaut :
+  - **Mesurer automatiquement les formes pas encore mesurées** : quand la programmation lance une tonte avec une forme et un angle jamais mesurés, le plugin mesure cette tonte (départ → dernier retour, recharges comprises) et l'ajoute à l'historique, sans notification en plus (repérée « (auto) » dans le tableau). Une forme déjà mesurée, par le bouton ou automatiquement, n'est plus mesurée.
+  - **Régler la notification de fin de tonte d'après la forme et l'angle** : l'heure de repli de la notification devient la durée mesurée pour la forme et l'angle de la tonte (moyenne des 3 dernières mesures, mesures de moins de 5 min ignorées) **+ 30 min de marge**. Sans mesure pour cette forme, la durée estimée du réglage s'applique. Cocher cette option coche aussi la mesure automatique (décochable ensuite).
+  - Si le robot fournit sa tâche de tonte, la fin reste détectée d'après elle (plus précis) : ces durées servent de repli. La notification indique si la durée est « mesurée » ou « estimée ».
+  - L'historique des mesures garde 30 entrées (au lieu de 10) pour conserver la mesure de chaque forme.
+  - « Prochaine tonte » affiche la fin estimée d'après la durée mesurée quand l'option est active.
+- **Journal des notifications** : chaque envoi indique désormais s'il est transmis (avec le nombre de fichiers joints), ignoré (case décochée) ou impossible (commande introuvable).
+
 ## 1.13.0 (2026-11-01)
 - **Alternance des formes de coupe** (onglet Programmation, section « Alternance des formes de coupe »). Une liste de 5 formes au maximum (Parallèle, Diamant, Damier ou Naturel, avec un angle de 0 à 359° sauf pour Naturel) ; avant chaque tonte lancée par la programmation, le plugin règle la forme suivante de la liste sur le robot, puis recommence au début. L'option ne peut être activée (et sauvegardée) que si la liste contient au moins une forme valide ; une ligne incomplète bloque la sauvegarde.
   - Le changement n'a lieu que si le robot est à la station, jamais pour une reprise après la pluie (même tonte). Si Worx ne confirme pas, la tonte part avec la forme actuelle (avertissement dans la notification) et la liste n'avance pas.

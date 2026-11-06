@@ -57,6 +57,14 @@ try {
             }
         }
 
+        foreach (array('auto_measure_enabled', 'duration_by_pattern') as $flag) {
+            $config[$flag] = (isset($config[$flag]) && $config[$flag] == '1') ? '1' : '0';
+        }
+        // La durée par forme suppose que les formes manquantes soient mesurées : valeur par défaut cohérente côté serveur aussi.
+        if ($config['duration_by_pattern'] == '1' && !isset($config['auto_measure_enabled'])) {
+            $config['auto_measure_enabled'] = '1';
+        }
+
         // Alternance des formes : liste normalisée (5 au plus, lignes valides) ; l'option ne s'active
         // que si au moins une forme valide est enregistrée (jamais confiance uniquement au JS).
         $rotation_errors = LandroidRTKScheduler::rotationErrors($config);

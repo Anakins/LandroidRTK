@@ -23,7 +23,7 @@ Ce plugin ne gère **volontairement pas** les anciens modèles Worx (déjà couv
 - **Tonte restante** : commandes *Tonte restante*, *Temps de tonte restant* et *Surface restante* (comme « Restant » dans l'application Worx), et coin de la carte « Reste 206 / 317 m² », puis « Tonte terminée ». Le démon doit être redémarré après la mise à jour.
 - **Onglet Carte** : plan du jardin, position du robot et passages du jour. Le démon doit tourner.
 - **Notification de fin de tonte** : case « Reçoit « fin de tonte » » (carte envoyée au format PNG) dans les notifications du planificateur. Bouton « Enregistrer l'image (PNG) » dans l'onglet Carte.
-- **Mesure du temps de tonte** (onglet Programmation) : le bouton lance le robot, ne pas le relancer ensuite. Tableau des 10 dernières mesures avec l'angle.
+- **Mesure du temps de tonte** (onglet Programmation) : le bouton lance le robot, ne pas le relancer ensuite. Tableau des 15 dernières mesures (5 formes × 3 mesures) avec la forme et l'angle, repliable (déplié par défaut).
 - **Exporter les données de diagnostic** (onglet Carte) : zip anonymisé pour signaler un problème.
 - Les statuts et erreurs sont traduits en français.
 

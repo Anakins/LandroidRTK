@@ -124,6 +124,8 @@ function LandroidRTKScheduler_fillForm(_config) {
     $('#sched_margin_minutes').val(_config.margin_minutes != null ? _config.margin_minutes : 0);
     $('#sched_mow_duration_minutes').val(_config.mow_duration_minutes != null ? _config.mow_duration_minutes : 120);
     $('#sched_timing_settle_minutes').val(_config.timing_settle_minutes != null ? _config.timing_settle_minutes : 30);
+    $('#sched_auto_measure').prop('checked', _config.auto_measure_enabled == '1');
+    $('#sched_duration_by_pattern').prop('checked', _config.duration_by_pattern == '1');
     LandroidRTKScheduler_refreshSettlePreview();
     $('#sched_spacing_days').val(_config.spacing_days || 1);
 
@@ -563,6 +565,8 @@ function LandroidRTKScheduler_buildConfig() {
         margin_minutes: $('#sched_margin_minutes').val(),
         mow_duration_minutes: $('#sched_mow_duration_minutes').val(),
         timing_settle_minutes: $('#sched_timing_settle_minutes').val(),
+        auto_measure_enabled: $('#sched_auto_measure').is(':checked') ? '1' : '0',
+        duration_by_pattern: $('#sched_duration_by_pattern').is(':checked') ? '1' : '0',
         spacing_days: $('#sched_spacing_days').val(),
         rain_own_enabled: $('#sched_rain_own_enabled').is(':checked') ? '1' : '0',
         rain_extra_cmd_id: $('#sched_rain_extra_cmd_id').val(),
@@ -867,7 +871,7 @@ function LandroidRTKScheduler_renderTiming(r) {
     var $b = $('#table_timing tbody').empty();
     (r.history || []).forEach(function (h) {
         $b.append($('<tr>')
-            .append($('<td>').text(LandroidRTKScheduler_fmtDate(h.start)))
+            .append($('<td>').text(LandroidRTKScheduler_fmtDate(h.start) + (h.auto ? ' ({{auto}})' : '')))
             .append($('<td>').text(h.pattern === null || h.pattern === undefined ? '?' : h.pattern))
             .append($('<td>').text(h.angle === null || h.angle === undefined ? (h.pattern === 'Naturel' ? '—' : '?') : h.angle + '°'))
             .append($('<td>').text(LandroidRTKScheduler_fmtDur(h.out_s)))
@@ -881,7 +885,7 @@ function LandroidRTKScheduler_renderTiming(r) {
     $('#bt_timingStart').toggle(!r.running);
     $('#bt_timingCancel').toggle(!!r.running);
     $('#timing_status').text(r.running
-        ? '{{Mesure en cours depuis}} ' + LandroidRTKScheduler_fmtDate(r.started_at) + ((r.pattern || r.angle) ? ' (' + (r.pattern ? r.pattern : '') + (r.pattern && r.angle ? ', ' : '') + (r.angle ? '{{angle}} ' + r.angle + '°' : '') + ')' : '') + ' — ' + r.returns + ' {{retour(s) à la station}}' + (r.docked ? ', {{actuellement à la station}}' : '')
+        ? (r.auto ? '{{Mesure automatique en cours depuis}} ' : '{{Mesure en cours depuis}} ') + LandroidRTKScheduler_fmtDate(r.started_at) + ((r.pattern || r.angle) ? ' (' + (r.pattern ? r.pattern : '') + (r.pattern && r.angle ? ', ' : '') + (r.angle ? '{{angle}} ' + r.angle + '°' : '') + ')' : '') + ' — ' + r.returns + ' {{retour(s) à la station}}' + (r.docked ? ', {{actuellement à la station}}' : '')
         : '');
 }
 function LandroidRTKScheduler_timingCall(action, done, extra) {
@@ -937,3 +941,32 @@ function LandroidRTKScheduler_refreshSettlePreview() {
     }
 }
 $(document).on('change keyup input', '#sched_timing_settle_minutes', LandroidRTKScheduler_refreshSettlePreview);
+
+
+/* Fin de tonte selon la forme : coche aussi la mesure automatique (modifiable ensuite). */
+$(document).on('change', '#sched_duration_by_pattern', function () {
+    if ($(this).is(':checked')) {
+        $('#sched_auto_measure').prop('checked', true);
+    }
+});
+
+
+// Historique des mesures de durée : repliable (déplié par défaut, choix mémorisé dans ce navigateur)
+(function () {
+    function appliquer(ouvert) {
+        $('#timing_history_wrap').toggle(ouvert);
+        $('#bt_timingToggle').attr('data-open', ouvert ? '1' : '0')
+            .find('i').attr('class', ouvert ? 'fas fa-chevron-up' : 'fas fa-chevron-down').end()
+            .find('span').text(ouvert ? "Replier l'historique des mesures" : "Déplier l'historique des mesures");
+    }
+    $(document).on('click', '#bt_timingToggle', function () {
+        var ouvert = $(this).attr('data-open') !== '1';
+        appliquer(ouvert);
+        try { localStorage.setItem('LandroidRTK_timing_open', ouvert ? '1' : '0'); } catch (e) {}
+    });
+    $(function () {
+        var ouvert = true;
+        try { if (localStorage.getItem('LandroidRTK_timing_open') === '0') ouvert = false; } catch (e) {}
+        appliquer(ouvert);
+    });
+})();

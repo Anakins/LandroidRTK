@@ -337,6 +337,10 @@ class LandroidRTKScheduler {
             'mow_duration_minutes' => '120',
             // Mesure du temps de tonte : attente à la station, chargé à 100 %, avant de conclure.
             'timing_settle_minutes' => '30',
+            // Durée par forme : mesurer automatiquement les formes jamais mesurées (départs de la programmation) ;
+            // caler la notification de fin de tonte sur la durée mesurée pour la forme et l'angle de la tonte.
+            'auto_measure_enabled' => '0',
+            'duration_by_pattern' => '0',
             'spacing_days' => '1',
             // Pluie : 2 emplacements fixes, pas une liste.
             // 1) Le capteur pluie natif du robot (lecture seule, juste
@@ -708,16 +712,19 @@ class LandroidRTKScheduler {
 
     public static function sendNotifications($config, $title, $message_html, $message_plain, $type = 'default', $files = array()) {
         if (empty($config['notifications']) || !is_array($config['notifications'])) {
+            log::add('LandroidRTK', 'info', 'Scheduler: notification « ' . $title . ' » (type ' . $type . ') : aucun destinataire configuré.');
             return;
         }
         foreach ($config['notifications'] as $notif) {
             if (empty($notif['cmd_id'])) {
                 continue;
             }
+            $dest = $notif['cmd_id'];
             // Filtre par type : les notifications "pas de tonte" ne partent
             // que vers les destinataires qui ont coché cette case (par
             // défaut activée, pour ne rien changer aux habitudes actuelles).
             if ($type == 'no_mow' && isset($notif['notify_no_mow']) && $notif['notify_no_mow'] == '0') {
+                log::add('LandroidRTK', 'debug', "Scheduler: notification « {$title} » ignorée pour {$dest} (case « pas de tonte » décochée).");
                 continue;
             }
             // Filtre par type : les notifications d'erreur robot ne partent
@@ -725,14 +732,17 @@ class LandroidRTKScheduler {
             // défaut désactivée : c'est une nouvelle option, on ne change
             // pas les habitudes existantes sans action explicite).
             if ($type == 'error' && (!isset($notif['notify_error']) || $notif['notify_error'] != '1')) {
+                log::add('LandroidRTK', 'debug', "Scheduler: notification « {$title} » ignorée pour {$dest} (case « erreur » décochée).");
                 continue;
             }
             // Fin de tonte (carte en image) : option à cocher, désactivée par défaut.
             if ($type == 'mow_end' && (!isset($notif['notify_mow_end']) || $notif['notify_mow_end'] != '1')) {
+                log::add('LandroidRTK', 'info', "Scheduler: notification « {$title} » ignorée pour {$dest} (case « fin de tonte » décochée sur cette ligne).");
                 continue;
             }
             $cmd = self::resolveCmd($notif['cmd_id']);
             if (!is_object($cmd)) {
+                log::add('LandroidRTK', 'error', "Scheduler: notification « {$title} » NON envoyée : la commande {$dest} est introuvable (supprimée ou mal saisie).");
                 continue;
             }
             $use_html = !empty($notif['html']) && $notif['html'] == '1';
@@ -744,6 +754,7 @@ class LandroidRTKScheduler {
                     $options['files'] = $files;
                 }
                 $cmd->execCmd($options);
+                log::add('LandroidRTK', 'info', "Scheduler: notification « {$title} » (type {$type}) transmise à " . $cmd->getHumanName() . ($files ? ' avec ' . count($files) . ' fichier(s) joint(s)' : ' sans fichier') . ' (aucune erreur côté Jeedom ; la réception dépend ensuite de ce plugin).');
             } catch (\Throwable $e) {
                 log::add('LandroidRTK', 'error', 'Scheduler: échec envoi notification cmd ' . $notif['cmd_id'] . ' : ' . $e->getMessage());
             }
@@ -821,6 +832,9 @@ class LandroidRTKScheduler {
             // Heure de départ de la dernière tonte lancée, tant que la
             // notification de fin de tonte n'a pas été traitée.
             'mow_end_pending' => null,
+            // Forme et angle de la tonte en cours (pour retrouver sa durée mesurée).
+            'current_mow_pattern' => null,
+            'current_mow_angle' => null,
             // Si une pluie interrompt une tonte en cours : timestamp
             // avant lequel on ignore le critère d'humidité même s'il
             // redevient favorable (le temps que le sol absorbe la pluie).
@@ -983,6 +997,10 @@ class LandroidRTKScheduler {
         );
 
         $mow_duration_seconds = max(60, intval($config['mow_duration_minutes']) * 60);
+        $est = self::mowDuration($eqLogic, $config, $state);
+        if ($est['measured']) {
+            $mow_duration_seconds = $est['seconds'] + self::MOW_END_MARGIN_MIN * 60;
+        }
         $status_detail_early = null;
         if (!empty($state['current_mow_started_at']) && ($now - $state['current_mow_started_at']) <= $mow_duration_seconds) {
             $remaining_min = ceil(($mow_duration_seconds - ($now - $state['current_mow_started_at'])) / 60);
@@ -1164,7 +1182,8 @@ class LandroidRTKScheduler {
             }
             $started = intval($state['mow_end_pending']);
             $now = time();
-            $duration = max(60, intval($config['mow_duration_minutes']) * 60);
+            $dur = self::mowDuration($eqLogic, $config, $state);
+            $duration = $dur['seconds'];
 
             // Automatique : le robot indique lui-même si la tâche de tonte est terminée (pourcentage tondu, tâche
             // refermée). Une recharge au milieu de la tonte laisse la tâche ouverte : pas de fausse fin. Les durées
@@ -1231,7 +1250,9 @@ class LandroidRTKScheduler {
             } else {
                 $parts = array(
                     "🏁 La période de tonte paramétrée de {$eqLogic->getName()} vient de s'achever.",
-                    "⏱️ Départ à " . date('H:i', $started) . ', durée de tonte ' . intval($config['mow_duration_minutes']) . ' min + ' . self::MOW_END_MARGIN_MIN . ' min de marge.',
+                    "⏱️ Départ à " . date('H:i', $started) . ', durée de tonte ' . intval(round($duration / 60)) . ' min'
+                        . ($dur['measured'] ? ' (mesurée pour cette forme et cet angle, ' . $dur['count'] . ' mesure' . ($dur['count'] > 1 ? 's' : '') . ')' : ' (estimée)')
+                        . ' + ' . self::MOW_END_MARGIN_MIN . ' min de marge.',
                 );
             }
             // Forme et angle réglés sur le robot à la fin de la tonte.
@@ -1413,7 +1434,8 @@ class LandroidRTKScheduler {
         if ($r['changed']) {
             sleep(10);   // laisse le robot recevoir ses nouveaux réglages avant le départ
         }
-        return array('ok' => true, 'text' => $next['text'], 'reason' => null);
+        return array('ok' => true, 'text' => $next['text'], 'reason' => null,
+            'label' => LandroidRTK::CUT_PATTERNS[$next['type']], 'angle' => $next['angle']);
     }
 
     /* ---------------------------------------------------------------- */
@@ -1429,7 +1451,7 @@ class LandroidRTKScheduler {
     const TIMING_MAX_S = 43200;         // abandon d'une mesure après 12 h
     const TIMING_LEAVE_MAX_S = 600;     // le robot doit avoir quitté la station dans les 10 min
     const TIMING_DOCKED_MAX_S = 10800;  // à la station depuis 3 h sans repartir : fini, même sans 100 %
-    const TIMING_HISTORY_MAX = 10;
+    const TIMING_HISTORY_MAX = 15;      // 5 formes en rotation (maximum) × 3 mesures utilisées pour la moyenne
     const DOCKED_LABELS = array('Dans la station', 'En charge');
     // Statuts sans information sur la position du robot (démon qui redémarre, perte de connexion) : ignorés par la mesure,
     // sinon une station → « Hors ligne/Inconnu » → station compterait un faux retour.
@@ -1477,6 +1499,80 @@ class LandroidRTKScheduler {
         return ($v === '') ? null : $v;
     }
 
+    /** Angle normalisé pour comparer des formes : '' (Naturel ou inconnu) ou entier en texte (« 349 »). */
+    private static function normAngle($angle) {
+        return (is_numeric($angle) && trim((string) $angle) !== '') ? (string) intval(round(floatval($angle))) : '';
+    }
+
+    /** Même forme et même angle ? Naturel n'a pas d'angle : seule la forme compte. */
+    private static function samePattern($l1, $a1, $l2, $a2) {
+        if (trim((string) $l1) === '' || trim((string) $l2) === '' || trim((string) $l1) !== trim((string) $l2)) {
+            return false;
+        }
+        return trim((string) $l1) === LandroidRTK::CUT_PATTERNS[0] || self::normAngle($a1) === self::normAngle($a2);
+    }
+
+    /**
+     * Durée mesurée (départ → dernier retour, recharges comprises) pour cette forme et cet angle : moyenne des 3 mesures
+     * les plus récentes (plus récentes en premier dans l'historique). Retourne array('seconds' => int, 'count' => int) ou null.
+     */
+    public static function measuredDuration($eqLogic, $label, $angle) {
+        if (trim((string) $label) === '') {
+            return null;
+        }
+        $vals = array();
+        foreach (self::getTimingHistory($eqLogic) as $h) {
+            if (!is_array($h) || !isset($h['total_s']) || intval($h['total_s']) < 300) {
+                continue;   // mesure absurdement courte (arrêtée tout de suite) : ignorée
+            }
+            if (self::samePattern($label, $angle, isset($h['pattern']) ? $h['pattern'] : '', isset($h['angle']) ? $h['angle'] : '')) {
+                $vals[] = intval($h['total_s']);
+                if (count($vals) >= 3) {
+                    break;
+                }
+            }
+        }
+        return $vals ? array('seconds' => intval(round(array_sum($vals) / count($vals))), 'count' => count($vals)) : null;
+    }
+
+    /**
+     * Durée de tonte à attendre avant la notification de fin (hors marge) pour la tonte démarrée : celle mesurée pour sa
+     * forme et son angle si l'option est cochée et qu'une mesure existe, sinon la durée estimée du réglage.
+     * Retourne array('seconds' => int, 'measured' => bool, 'count' => int).
+     */
+    public static function mowDuration($eqLogic, $config, $state) {
+        $fallback = array('seconds' => max(60, intval($config['mow_duration_minutes']) * 60), 'measured' => false, 'count' => 0);
+        if (empty($config['duration_by_pattern']) || $config['duration_by_pattern'] != '1') {
+            return $fallback;
+        }
+        $m = self::measuredDuration($eqLogic, isset($state['current_mow_pattern']) ? $state['current_mow_pattern'] : null,
+            isset($state['current_mow_angle']) ? $state['current_mow_angle'] : null);
+        if ($m === null) {
+            return $fallback;
+        }
+        return array('seconds' => max(60, min(self::TIMING_MAX_S, $m['seconds'])), 'measured' => true, 'count' => $m['count']);
+    }
+
+    /** Forme et angle réglés sur le robot (commandes), pour une tonte qui part sans changement de forme. */
+    private static function robotPatternAndAngle($eqLogic) {
+        $a = $eqLogic->getCmd(null, 'angle');
+        return array(self::currentPattern($eqLogic), is_object($a) ? trim((string) $a->execCmd()) : '');
+    }
+
+    /** Mesure automatique (sans bouton, sans notification de départ) d'une tonte lancée par la programmation. */
+    private static function beginAutoTiming($eqLogic, $now, $label, $angle) {
+        $t = self::readJsonConfig($eqLogic, 'mowing_timing', array());
+        if (!empty($t['running'])) {
+            return false;   // une mesure est déjà en cours : on ne la remplace pas
+        }
+        $t = array('running' => true, 'auto' => true, 'started_at' => $now,
+            'angle' => (self::normAngle($angle) === '' ? null : self::normAngle($angle)), 'pattern' => $label,
+            'left' => false, 'docked' => true, 'out_ts' => $now, 'out_total' => 0, 'returns' => 0,
+            'last_return' => null, 'full_since' => null);
+        self::saveJsonConfig($eqLogic, 'mowing_timing', $t);
+        return true;
+    }
+
     /** Mesure en cours + historique, pour l'onglet. */
     public static function timingInfo($eqLogic) {
         $t = self::readJsonConfig($eqLogic, 'mowing_timing', array());
@@ -1486,6 +1582,7 @@ class LandroidRTKScheduler {
             'started_at' => $running ? intval($t['started_at']) : null,
             'angle' => $running && isset($t['angle']) ? $t['angle'] : null,
             'pattern' => $running && isset($t['pattern']) ? $t['pattern'] : null,
+            'auto' => $running && !empty($t['auto']),
             'returns' => $running ? intval($t['returns']) : 0,
             'docked' => $running ? !empty($t['docked']) : null,
             'history' => self::getTimingHistory($eqLogic),
@@ -1538,6 +1635,8 @@ class LandroidRTKScheduler {
         $state = self::getState($eqLogic);
         $state['last_mow_date'] = date('Y-m-d', $now);
         $state['current_mow_started_at'] = $now;
+        $state['current_mow_pattern'] = $t['pattern'];
+        $state['current_mow_angle'] = $t['angle'];
         $state['mow_end_pending'] = null;
         self::saveState($eqLogic, $state);
         log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): mesure du temps de tonte lancée (forme ' . ($t['pattern'] === null ? '?' : $t['pattern']) . ', angle ' . ($t['angle'] === null ? '?' : $t['angle'] . '°') . ').');
@@ -1657,12 +1756,20 @@ class LandroidRTKScheduler {
         $pattern = array_key_exists('pattern', $t) ? $t['pattern'] : self::currentPattern($eqLogic);
         $entry = array('start' => $started, 'end' => $last, 'pattern' => $pattern, 'angle' => $t['angle'],
             'total_s' => max(0, $last - $started), 'out_s' => intval($t['out_total']), 'returns' => intval($t['returns']));
+        if (!empty($t['auto'])) {
+            $entry['auto'] = true;
+        }
         $history = self::getTimingHistory($eqLogic);
         array_unshift($history, $entry);
         $history = array_slice($history, 0, self::TIMING_HISTORY_MAX);
         self::saveJsonConfig($eqLogic, 'mowing_timing_history', $history);
         self::saveJsonConfig($eqLogic, 'mowing_timing', array());
 
+        if (!empty($t['auto'])) {
+            // Mesure automatique : pas de notification en plus de celle de fin de tonte ; la durée est mémorisée pour la forme.
+            log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): mesure automatique terminée pour « ' . self::patternText($entry['pattern'], $entry['angle']) . ' » : ' . self::fmtDuration($entry['total_s']) . ' au total (' . self::fmtDuration($entry['out_s']) . ' hors station, ' . $entry['returns'] . ' retour(s)). Mémorisée pour les prochaines tontes de cette forme.');
+            return;
+        }
         $recharges = max(0, $entry['returns'] - 1);
         $parts = array(
             "⏱️ Mesure du temps de tonte terminée.",
@@ -1986,7 +2093,27 @@ class LandroidRTKScheduler {
         $state['last_mow_date'] = $today;
         $state['current_mow_started_at'] = $now;
         $state['mow_end_pending'] = $now;
-        log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte prévue vers ' . date('H:i', $now + max(60, intval($config['mow_duration_minutes']) * 60) + self::MOW_END_MARGIN_MIN * 60) . ' (si la case est cochée).');
+        // Forme et angle de cette tonte : ceux qui viennent d'être appliqués, sinon ceux réglés sur le robot.
+        if (!$restarting_after_rain_interrupt) {
+            if ($rotation !== null && !empty($rotation['ok'])) {
+                $state['current_mow_pattern'] = $rotation['label'];
+                $state['current_mow_angle'] = $rotation['angle'];
+            } else {
+                list($cp, $ca) = self::robotPatternAndAngle($eqLogic);
+                $state['current_mow_pattern'] = $cp;
+                $state['current_mow_angle'] = ($ca === '' ? null : $ca);
+            }
+            // Forme jamais mesurée : on mesure cette tonte (historique alimenté sans rien envoyer de plus).
+            if (!empty($config['auto_measure_enabled']) && $config['auto_measure_enabled'] == '1'
+                && $state['current_mow_pattern'] !== null && $state['current_mow_pattern'] !== ''
+                && self::measuredDuration($eqLogic, $state['current_mow_pattern'], $state['current_mow_angle']) === null) {
+                if (self::beginAutoTiming($eqLogic, $now, $state['current_mow_pattern'], $state['current_mow_angle'])) {
+                    log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): « ' . self::patternText($state['current_mow_pattern'], $state['current_mow_angle']) . ' » n\'a jamais été mesurée : mesure automatique de cette tonte.');
+                }
+            }
+        }
+        $planned = self::mowDuration($eqLogic, $config, $state);
+        log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): notification de fin de tonte prévue vers ' . date('H:i', $now + $planned['seconds'] + self::MOW_END_MARGIN_MIN * 60) . ' (si la case est cochée ; durée ' . ($planned['measured'] ? 'mesurée pour cette forme' : 'estimée') . ' ' . intval(round($planned['seconds'] / 60)) . ' min + ' . self::MOW_END_MARGIN_MIN . ' min de marge ; le robot peut aussi la déclencher plus tôt en refermant sa tâche).');
         $state['last_notification_reason'] = null;
         self::saveState($eqLogic, $state);
 
