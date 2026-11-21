@@ -2226,7 +2226,12 @@ class LandroidRTKScheduler {
             }
         }
 
-        if ($state['last_notification_reason'] == $reason && $state['last_notification_date'] == $today) {
+        // Toutes les raisons qui signifient « pas de tonte aujourd'hui » partagent UNE seule clé anti-doublon :
+        // sinon, au fil de l'après-midi, la raison évolue (humidité au-dessus du seuil → sous le seuil mais pas
+        // assez longtemps → fenêtre horaire refermée) et chaque changement renvoyait une notification de plus.
+        // Les raisons « en attente » (batterie, pluie, météo, espacement) gardent leur propre clé.
+        $reason_key = in_array($reason, array('humidity', 'humidity_wait', 'window_closed', 'temperature_low', 'temperature_high')) ? 'no_mow_today' : $reason;
+        if ($state['last_notification_reason'] == $reason_key && $state['last_notification_date'] == $today) {
             return; // déjà notifié aujourd'hui pour cette même raison
         }
         $humidity_val = self::getCmdValue($config['humidity_cmd_id']);
@@ -2292,7 +2297,7 @@ class LandroidRTKScheduler {
         log::add('LandroidRTK', 'info', 'Scheduler (' . $eqLogic->getHumanName() . '): ' . $built['plain']);
         log::add('LandroidRTK', 'debug', 'Scheduler (' . $eqLogic->getHumanName() . ', raison=' . $reason . '): ' . $built['plain']);
 
-        $state['last_notification_reason'] = $reason;
+        $state['last_notification_reason'] = $reason_key;
         $state['last_notification_date'] = $today;
         self::saveState($eqLogic, $state);
     }

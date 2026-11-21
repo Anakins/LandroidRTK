@@ -125,6 +125,8 @@ class LandroidRTK extends eqLogic {
      * Retourne le tableau PHP décodé depuis le JSON, ou null en cas
      * d'échec (avec log d'erreur explicite dans tous les cas).
      */
+    private static $authBlocked = false;
+
     private static function callHelper($args) {
         $email = self::getEmail();
         $password = self::getPassword();
@@ -132,6 +134,17 @@ class LandroidRTK extends eqLogic {
             log::add('LandroidRTK', 'error', 'Email ou mot de passe Worx manquant. Allez dans la configuration du plugin pour les renseigner.');
             return null;
         }
+
+        // Identifiants refusés / limite de débit : on ne réessaie pas chaque minute (cela aggrave le blocage et
+        // remplit le journal). Le blocage tombe tout seul au bout du délai, ou dès que l'e-mail/mot de passe change.
+        $cred_hash = md5($email . '|' . $password);
+        $block = cache::byKey('LandroidRTK::authblock')->getValue(array());
+        if (is_array($block) && !empty($block['until']) && $block['until'] > time() && ($block['hash'] ?? '') === $cred_hash) {
+            self::$authBlocked = true;
+            log::add('LandroidRTK', 'debug', 'callHelper(): appel suspendu jusqu\'à ' . date('H:i', $block['until']) . ' (' . ($block['kind'] ?? '?') . ') : ' . ($block['message'] ?? ''));
+            return null;
+        }
+        self::$authBlocked = false;
 
         $python = self::getVenvPython();
         if (!file_exists($python)) {
@@ -171,6 +184,12 @@ class LandroidRTK extends eqLogic {
         }
         if (isset($decoded['error'])) {
             log::add('LandroidRTK', 'error', 'Worx: ' . $decoded['error']);
+            $kind = $decoded['kind'] ?? '';
+            if ($kind == 'auth' || $kind == 'rate') {
+                $minutes = ($kind == 'auth') ? 15 : 10;
+                cache::set('LandroidRTK::authblock', array('hash' => $cred_hash, 'until' => time() + $minutes * 60, 'kind' => $kind, 'message' => $decoded['error']));
+                log::add('LandroidRTK', 'error', 'Worx: nouvelles tentatives suspendues ' . $minutes . ' min (jusqu\'à ' . date('H:i', time() + $minutes * 60) . ') pour ne pas aggraver le blocage. Corrigez l\'e-mail/mot de passe dans la configuration du plugin : la reprise est alors immédiate.');
+            }
             return null;
         }
         return $decoded;
@@ -420,7 +439,8 @@ class LandroidRTK extends eqLogic {
         log::add('LandroidRTK', 'debug', 'refreshStatus(): appel pour ' . $this->getLogicalId());
         $data = self::callHelper(array('status', $this->getLogicalId()));
         if ($data === null) {
-            log::add('LandroidRTK', 'error', 'refreshStatus(): callHelper() a échoué pour ' . $this->getLogicalId() . ' (voir logs ci-dessus pour la raison précise)');
+            // Appel suspendu après un refus d'identifiants : déjà expliqué (une fois) dans le journal, pas de message répété chaque minute.
+            log::add('LandroidRTK', self::$authBlocked ? 'debug' : 'error', 'refreshStatus(): callHelper() a échoué pour ' . $this->getLogicalId() . ' (voir logs ci-dessus pour la raison précise)');
             return false;
         }
         log::add('LandroidRTK', 'debug', 'refreshStatus(): données reçues = ' . json_encode(self::redactForLog($data)));

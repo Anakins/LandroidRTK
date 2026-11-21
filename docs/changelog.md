@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.14.5 (2026-11-21)
+- Identifiants Worx refusés (HTTP 400/401/403 à l'authentification) : le journal affiche maintenant un message clair (« Identifiants Worx refusés… vérifiez l'e-mail et le mot de passe ») au lieu d'une trace Python de 30 lignes, et la session HTTP est refermée proprement (plus de « Unclosed client session »).
+- Les tentatives sont suspendues 15 min après un refus d'identifiants (10 min après une limite de débit), au lieu de réessayer chaque minute (des milliers de tentatives pouvaient bloquer davantage le compte). La reprise est immédiate dès que l'e-mail ou le mot de passe est modifié dans la configuration.
+
+## 1.14.4 (2026-11-09)
+- Correctif : une seule notification « ne tondra pas aujourd'hui » par jour. Quand la raison évoluait dans l'après-midi (humidité au-dessus du seuil, puis sous le seuil mais pas assez longtemps, puis fenêtre horaire refermée), chaque changement renvoyait une notification (jusqu'à 3 le même jour). Les raisons humidité, fenêtre refermée et température partagent maintenant la même clé anti-doublon.
+
 ## 1.14.3 (2026-11-06)
 - Mise en page : le bloc « Durée selon la forme » (onglet Programmation) a maintenant la même largeur que les autres blocs (colonnes 6/12, texte d'aide aligné à droite comme les autres).
 

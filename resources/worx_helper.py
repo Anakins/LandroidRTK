@@ -33,6 +33,44 @@ except ImportError as exc:
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import worx_map  # noqa: E402
 
+
+class _Cloud(WorxCloud):
+    """WorxCloud dont la session HTTP est refermée même si l'authentification échoue
+    (sinon : « Unclosed client session » en plus de l'erreur)."""
+
+    async def __aenter__(self):
+        try:
+            return await super().__aenter__()
+        except BaseException:
+            api = getattr(self, "_api", None)
+            try:
+                if api is not None:
+                    await api.close()
+            except Exception:
+                pass
+            raise
+
+
+def auth_error_payload(exc):
+    """Message lisible + type d'erreur ('auth', 'rate', 'server', 'other') pour une exception d'authentification."""
+    name = type(exc).__name__
+    if name in ("RequestError", "AuthorizationError", "ForbiddenError"):
+        code = {"RequestError": 400, "AuthorizationError": 401, "ForbiddenError": 403}[name]
+        return {
+            "error": f"Identifiants Worx refusés par le serveur d'authentification (HTTP {code}). "
+            "L'e-mail ou le mot de passe est incorrect, ou le compte a changé (mot de passe modifié, compte "
+            "bloqué après trop d'essais). Vérifiez-les en vous connectant à l'application Worx, puis "
+            "mettez-les à jour dans la configuration du plugin.",
+            "kind": "auth",
+        }
+    if name == "TooManyRequestsError":
+        return {"error": "Trop de requêtes envoyées à l'API Worx récemment (limite de débit atteinte). "
+                         "Réessaie dans quelques minutes.", "kind": "rate"}
+    if name in ("ServiceUnavailableError", "InternalServerError", "NoConnectionError"):
+        return {"error": f"Serveur Worx indisponible ou injoignable ({name}). Réessai automatique plus tard.",
+                "kind": "server"}
+    return {"error": f"Échec d'authentification Worx ({name}): {exc}", "kind": "other"}
+
 STATUS_LABELS_FR = {
     "home": "Dans la station",
     "docked": "Dans la station",
@@ -476,17 +514,11 @@ async def run():
         print(json.dumps({"error": str(exc)}))
         sys.exit(1)
 
-    async with WorxCloud(email, password, "worx") as cloud:
+    async with _Cloud(email, password, "worx") as cloud:
         try:
             await cloud.authenticate()
         except Exception as exc:
-            if type(exc).__name__ == "TooManyRequestsError":
-                print(json.dumps({
-                    "error": "Trop de requêtes envoyées à l'API Worx récemment "
-                    "(limite de débit atteinte). Réessaie dans quelques minutes."
-                }))
-            else:
-                print(json.dumps({"error": f"Échec d'authentification Worx: {exc}"}))
+            print(json.dumps(auth_error_payload(exc), ensure_ascii=False))
             sys.exit(1)
         await cloud.connect()
         devices = cloud.devices
@@ -601,4 +633,16 @@ async def run():
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except Exception as exc:   # échec dans l'authentification d'entrée (async with) ou imprévu : jamais de traceback brute
+        if type(exc).__name__.endswith("Error") and type(exc).__name__ in (
+                "RequestError", "AuthorizationError", "ForbiddenError", "TooManyRequestsError",
+                "ServiceUnavailableError", "InternalServerError", "NoConnectionError"):
+            print(json.dumps(auth_error_payload(exc), ensure_ascii=False))
+        else:
+            print(json.dumps({"error": f"Erreur inattendue du script Worx ({type(exc).__name__}): {exc}", "kind": "other"},
+                             ensure_ascii=False))
+        sys.exit(1)
